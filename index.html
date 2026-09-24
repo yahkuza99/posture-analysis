@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Posture Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ Top bar (not printed) ============ -->
+<header class="appbar no-print">
+  <div class="appbar-title">Posture Analysis</div>
+  <div class="appbar-actions">
+    <button id="btnNew" type="button">เคสใหม่</button>
+    <button id="btnOpen" type="button">เปิดไฟล์</button>
+    <button id="btnSave" type="button">บันทึกไฟล์</button>
+    <button id="btnPrint" type="button" class="primary">พิมพ์ / PDF</button>
+    <input id="fileOpen" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div id="saveStatus" class="appbar-status"></div>
+</header>
+
+<main class="pages">
+
+  <!-- ============ Page 1: Posture chart ============ -->
+  <section class="page">
+    <div class="page-head">
+      <div class="logo-slot"></div>
+      <div class="head-right">
+        <h1>POSTURE ANALYSIS</h1>
+        <h2>POSTURE CHART</h2>
+        <label class="head-date">DATE <input type="date" data-bind="patient.date"><span class="date-print"></span></label>
+      </div>
+    </div>
+    <div class="fields">
+      <label>Name <input data-bind="patient.name"></label>
+      <label>Lastname <input data-bind="patient.lastname"></label>
+      <label>CN <input data-bind="patient.cn"></label>
+      <label>Physical Therapist <input data-bind="patient.therapist"></label>
+    </div>
+    <div class="posture-grid">
+      <div class="slot" data-slot="front"></div>
+      <div class="findings" data-findings="row1"></div>
+      <div class="slot" data-slot="back"></div>
+      <div class="slot" data-slot="sideR"></div>
+      <div class="findings" data-findings="row2"></div>
+      <div class="slot" data-slot="sideL"></div>
+    </div>
+  </section>
+
+  <!-- ============ Page 2: Functional analysis ============ -->
+  <section class="page">
+    <div class="page-head">
+      <div class="logo-slot"></div>
+      <div class="head-right">
+        <h1>FUNCTIONAL ANALYSIS</h1>
+        <h2>&nbsp;</h2>
+        <label class="head-date">DATE <input type="date" data-bind="patient.date"><span class="date-print"></span></label>
+      </div>
+    </div>
+    <div class="fields">
+      <label>Name <input data-bind="patient.name"></label>
+      <label>Lastname <input data-bind="patient.lastname"></label>
+      <label>CN <input data-bind="patient.cn"></label>
+      <label>Physical Therapist <input data-bind="patient.therapist"></label>
+    </div>
+    <div class="func-block">
+      <div class="func-title">SINGLE LEG STANCE</div>
+      <div class="func-photos">
+        <div class="slot" data-slot="slsL"></div>
+        <div class="slot" data-slot="slsR"></div>
+      </div>
+      <div class="result"><b>ผลการตรวจ:</b> <div class="editable" contenteditable="true" data-bind-text="functional.sls"></div></div>
+    </div>
+    <div class="func-block">
+      <div class="func-title">SQUAT</div>
+      <div class="func-photos">
+        <div class="slot" data-slot="squatBack"></div>
+        <div class="slot" data-slot="squatSide"></div>
+      </div>
+      <div class="result"><b>ผลการตรวจ:</b> <div class="editable" contenteditable="true" data-bind-text="functional.squat"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ Page 3: Muscle chart ============ -->
+  <section class="page">
+    <div class="page-head">
+      <div class="logo-slot"></div>
+      <div class="head-right">
+        <h1>POSTURE ANALYSIS</h1>
+        <h2>MUSCLE CHART</h2>
+        <label class="head-date">DATE <input type="date" data-bind="patient.date"><span class="date-print"></span></label>
+      </div>
+    </div>
+    <div class="fields">
+      <label>Name <input data-bind="patient.name"></label>
+      <label>Lastname <input data-bind="patient.lastname"></label>
+      <label>CN <input data-bind="patient.cn"></label>
+      <label>Physical Therapist <input data-bind="patient.therapist"></label>
+    </div>
+
+    <div class="muscle-tools no-print">
+      <span class="muscle-tools-label">ระบายสี:</span>
+      <button type="button" class="mt-btn active" data-mtool="tight"><span class="dot tight"></span>ตึงตัว</button>
+      <button type="button" class="mt-btn" data-mtool="weak"><span class="dot weak"></span>อ่อนแรง</button>
+      <button type="button" class="mt-btn" data-mtool="erase">ยางลบ</button>
+      <label class="mt-size">ขนาดแปรง <input id="brushSize" type="range" min="4" max="40" value="12"></label>
+      <button type="button" id="muscleUndo">ย้อนกลับ</button>
+      <button type="button" id="muscleClear">ล้าง</button>
+      <button type="button" id="muscleImage">เปลี่ยนภาพ</button>
+      <input id="muscleFile" type="file" accept="image/*" hidden>
+    </div>
+    <div class="muscle-area">
+      <canvas id="muscleCanvas"></canvas>
+      <button type="button" id="muscleEmpty" class="muscle-empty no-print" hidden>คลิกเพื่อใส่ภาพ Muscle chart<br><small>ใส่ครั้งเดียว ระบบจะจำไว้ใช้กับทุกเคส</small></button>
+      <div class="legend">
+        <div><span class="legend-dot tight"></span><span><b>TIGHTNESS</b><br>กล้ามเนื้อตึงตัว</span></div>
+        <div><span class="legend-dot weak"></span><span><b>WEAKNESS</b><br>กล้ามเนื้ออ่อนแรง</span></div>
+      </div>
+    </div>
+    <div class="muscle-lists">
+      <div>
+        <div class="list-title"><span class="legend-dot small tight"></span>TIGHTNESS กล้ามเนื้อตึงตัว</div>
+        <div class="editable box" contenteditable="true" data-bind-text="muscle.tightList" data-placeholder="เช่น Upper trapezius, Hip flexors"></div>
+      </div>
+      <div>
+        <div class="list-title"><span class="legend-dot small weak"></span>WEAKNESS กล้ามเนื้ออ่อนแรง</div>
+        <div class="editable box" contenteditable="true" data-bind-text="muscle.weakList" data-placeholder="เช่น Gluteus medius, Deep neck flexors"></div>
+      </div>
+    </div>
+    <div class="section-title">IMPRESSION</div>
+    <div class="editable box" contenteditable="true" data-bind-text="impression"></div>
+    <div class="section-title">RECOMMENDATION</div>
+    <div class="editable box" contenteditable="true" data-bind-text="recommendation"></div>
+    <div class="recheck">Rechecked by <input data-bind="patient.rechecked"></div>
+  </section>
+</main>
+
+<!-- ============ Annotation editor (modal) ============ -->
+<div id="editor" class="editor no-print" hidden>
+  <aside class="ed-side">
+    <div class="ed-title" id="edTitle">แก้ไขรูป</div>
+    <div class="ed-group">
+      <div class="ed-label">เครื่องมือ</div>
+      <div class="ed-tools" id="edTools"></div>
+    </div>
+    <div class="ed-group">
+      <div class="ed-label">สี</div>
+      <div class="ed-colors" id="edColors"></div>
+    </div>
+    <div class="ed-hint" id="edHint"></div>
+    <div class="ed-group ed-row">
+      <button type="button" id="edUndo" title="Ctrl+Z">ย้อนกลับ</button>
+      <button type="button" id="edDelete" title="Delete">ลบที่เลือก</button>
+      <button type="button" id="edClear">ล้างทั้งหมด</button>
+    </div>
+    <div class="ed-group">
+      <div class="ed-label">ค่าที่วัดได้</div>
+      <div id="edMeasures" class="ed-measures"></div>
+    </div>
+    <div class="ed-help">
+      ลากด้วยเมาส์ขวา หรือกด Space ค้างแล้วลาก = เลื่อนภาพ<br>
+      หมุนลูกกลิ้ง = ซูม · ในโหมด "เลือก/ย้าย" ลากจุดเพื่อปรับตำแหน่ง
+    </div>
+    <div class="ed-group ed-row ed-bottom">
+      <button type="button" id="edFit">พอดีจอ</button>
+      <button type="button" id="edDone" class="primary">เสร็จ</button>
+    </div>
+  </aside>
+  <div class="ed-stage" id="edStage"><canvas id="edCanvas"></canvas></div>
+</div>
+
+<input id="photoFile" type="file" accept="image/*" hidden>
+<div id="toast" class="toast no-print" hidden></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
