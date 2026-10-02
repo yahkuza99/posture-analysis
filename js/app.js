@@ -45,7 +45,7 @@ const TOOLS = [
   { id: 'point',  label: 'จุด',        key: 'P', color: '#f4c20d', clicks: 1 },
   { id: 'plumb',  label: 'เส้นดิ่ง',    key: 'G', color: '#2dbd3a', clicks: 1 },
   { id: 'line',   label: 'เส้นระดับ',   key: 'L', color: '#e3262e', clicks: 2 },
-  { id: 'dashed', label: 'เส้นประ',     key: 'D', color: '#f4c20d', clicks: 2 },
+  { id: 'dashed', label: 'เส้นตรง',     key: 'D', color: '#f4c20d', clicks: 2 },
   { id: 'angle',  label: 'มุม',         key: 'A', color: '#e3262e', clicks: 3 },
   { id: 'qangle', label: 'Q-angle',     key: 'Q', color: '#f4c20d', clicks: 3 },
   { id: 'text',   label: 'ข้อความ',     key: 'T', color: '#111111', clicks: 1 },
@@ -196,7 +196,7 @@ function bindFields() {
     });
   });
   $$('[data-bind-text]').forEach(el => {
-    el.addEventListener('input', () => { setPath(state, el.dataset.bindText, readEditable(el)); changed(); });
+    el.addEventListener('input', () => { setPath(state, el.dataset.bindText, readEditable(el)); fitText(el); changed(); });
     el.addEventListener('paste', plainPaste);
   });
 }
@@ -206,6 +206,17 @@ function updatePrintDate() {
   if (v) { const [y, m, d] = v.split('-').map(Number); txt = new Date(y, m - 1, d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
   $$('.date-print').forEach(el => (el.textContent = txt));
 }
+// Shrink the font of a fixed-height box until its text fits (11pt down to 6.5pt).
+const FIT_MAX = 11, FIT_MIN = 6.5;
+function fitText(el) {
+  let size = FIT_MAX;
+  el.style.fontSize = size + 'pt';
+  while (el.scrollHeight > el.clientHeight + 1 && size > FIT_MIN) {
+    size -= 0.5; el.style.fontSize = size + 'pt';
+  }
+  el.classList.toggle('overfull', el.scrollHeight > el.clientHeight + 1);
+}
+function fitAll() { $$('[data-bind-text]').forEach(fitText); }
 function readEditable(el) { return el.innerText.replace(/\n$/, ''); }
 function plainPaste(e) {
   e.preventDefault();
@@ -215,6 +226,7 @@ function fillFields() {
   $$('[data-bind]').forEach(el => { el.value = getPath(state, el.dataset.bind) ?? ''; });
   updatePrintDate();
   $$('[data-bind-text]').forEach(el => { el.innerText = getPath(state, el.dataset.bindText) ?? ''; });
+  fitAll();
 }
 
 // ------------------------------------------------------------------ findings boxes (page 1)
@@ -346,10 +358,9 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
         }
         break;
       }
-      case 'dashed':
-        ctx.setLineDash([4 * u, 3.5 * u]); ctx.lineWidth = 2 * u;
+      case 'dashed': // drawn solid now; the id is kept so saved cases still open
+        ctx.lineWidth = 2.6 * u;
         ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.stroke();
-        ctx.setLineDash([]);
         landmark(ctx, pts[0], u, '#f4c20d'); landmark(ctx, pts[1], u, '#f4c20d'); break;
       case 'angle': case 'qangle': {
         const [a, v, b] = pts;
@@ -651,9 +662,13 @@ function edPointerDown(e) {
     const b = hitBody(screen);
     ed.selected = b;
     if (b >= 0) { snapshot(); ed.drag = { kind: 'body', i: b, last: img }; }
+    else ed.press = { x: e.clientX, y: e.clientY, tx: ed.tx, ty: ed.ty, img: null }; // empty space: drag to pan
     drawEditor(); return;
   }
-
+  // drawing tools: decide on release — a click places a point, a drag pans the photo
+  ed.press = { x: e.clientX, y: e.clientY, tx: ed.tx, ty: ed.ty, img };
+}
+function placePoint(img) {
   const t = TOOLS.find(t => t.id === ed.tool);
   if (!ed.pending) ed.pending = { type: t.id, color: ed.color, pts: [] };
   ed.pending.pts.push(img);
@@ -670,6 +685,9 @@ function edPointerDown(e) {
 function edPointerMove(e) {
   if (!ed.photo) return;
   const { screen, img } = toImg(e);
+  if (ed.press && !ed.pan && Math.hypot(e.clientX - ed.press.x, e.clientY - ed.press.y) > 4) {
+    ed.pan = ed.press; ed.press = null; edCanvas.style.cursor = 'grabbing';
+  }
   if (ed.pan) { ed.tx = ed.pan.tx + e.clientX - ed.pan.x; ed.ty = ed.pan.ty + e.clientY - ed.pan.y; drawEditor(); return; }
   if (ed.drag) {
     const sh = ed.photo.shapes[ed.drag.i];
@@ -681,6 +699,7 @@ function edPointerMove(e) {
   if (ed.pending) { ed.cursor = screen; drawEditor(); }
 }
 function edPointerUp() {
+  if (ed.press) { const p = ed.press; ed.press = null; if (p.img) placePoint(p.img); }
   if (ed.pan) { ed.pan = null; edCanvas.style.cursor = ed.tool === 'select' ? 'default' : 'crosshair'; }
   if (ed.drag) { ed.drag = null; drawEditor(); }
 }
@@ -718,7 +737,7 @@ function insertMeasure(txt) {
   else {
     const cur = getPath(state, cfg.text) || '';
     setPath(state, cfg.text, cur ? cur + ', ' + txt : txt);
-    $(`[data-bind-text="${cfg.text}"]`).innerText = getPath(state, cfg.text);
+    const box = $(`[data-bind-text="${cfg.text}"]`); box.innerText = getPath(state, cfg.text); fitText(box);
   }
   changed(); toast('เพิ่มในผลตรวจแล้ว');
 }
@@ -743,6 +762,7 @@ function buildEditorUI() {
   edCanvas.addEventListener('pointerdown', edPointerDown);
   edCanvas.addEventListener('pointermove', edPointerMove);
   edCanvas.addEventListener('pointerup', edPointerUp);
+  edCanvas.addEventListener('pointercancel', () => { ed.press = null; edPointerUp(); });
   edCanvas.addEventListener('pointerleave', () => { ed.cursor = null; if (ed.pending) drawEditor(); });
   edCanvas.addEventListener('wheel', edWheel, { passive: false });
   edCanvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -769,7 +789,7 @@ function buildEditorUI() {
 
 // ------------------------------------------------------------------ muscle chart (page 3)
 
-const mc = { tool: 'tight', size: 12, stroke: null, tf: null, img: null };
+const mc = { tool: 'tight', shape: 'ellipse', size: 12, stroke: null, tf: null, img: null };
 const mCanvas = $('#muscleCanvas');
 
 async function drawMuscle() {
@@ -798,24 +818,52 @@ async function drawMuscle() {
     lc.lineCap = 'round'; lc.lineJoin = 'round';
     state.muscle.strokes.filter(st => st.type === type).forEach(st => {
       const pts = st.pts.map(p => [p[0] * s + mc.tf.tx, p[1] * s + mc.tf.ty]); const r = st.r * s;
+      if (st.shape === 'ellipse') {
+        const e = ellipseOf(pts[0], pts[pts.length - 1], r);
+        lc.beginPath(); lc.ellipse(e.cx, e.cy, e.rx, e.ry, e.rot, 0, Math.PI * 2); lc.fill(); return;
+      }
       if (pts.length === 1) { lc.beginPath(); lc.arc(pts[0][0], pts[0][1], r, 0, Math.PI * 2); lc.fill(); return; }
-      lc.lineWidth = r * 2; lc.beginPath(); pts.forEach((p, i) => (i ? lc.lineTo(...p) : lc.moveTo(...p))); lc.stroke();
+      // quadratic curves through the midpoints give a smooth line instead of a jagged polyline
+      lc.lineWidth = r * 2; lc.beginPath(); lc.moveTo(...pts[0]);
+      for (let i = 1; i < pts.length - 1; i++) {
+        lc.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+      }
+      lc.lineTo(...pts[pts.length - 1]); lc.stroke();
     });
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.62; ctx.drawImage(layer, 0, 0); ctx.restore();
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.62;
+    ctx.filter = `blur(${0.7 * k}px)`; // soft edge so the colour blends into the chart
+    ctx.drawImage(layer, 0, 0); ctx.restore();
   }
 }
 function muscleImgPoint(e) {
   const r = mCanvas.getBoundingClientRect();
   return [(e.clientX - r.left - mc.tf.tx) / mc.tf.s, (e.clientY - r.top - mc.tf.ty) / mc.tf.s];
 }
+// An oval drawn along the drag: its long axis follows the muscle, its width is the brush size.
+function ellipseOf(a, b, r) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  return { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, rx: Math.max(Math.hypot(dx, dy) / 2, r), ry: r, rot: Math.atan2(dy, dx) };
+}
+function hitsStroke(st, p, pad) {
+  if (st.shape === 'ellipse') {
+    const e = ellipseOf(st.pts[0], st.pts[st.pts.length - 1], st.r);
+    const c = Math.cos(-e.rot), s = Math.sin(-e.rot), x = p[0] - e.cx, y = p[1] - e.cy;
+    const u = x * c - y * s, v = x * s + y * c;
+    return (u * u) / ((e.rx + pad) ** 2) + (v * v) / ((e.ry + pad) ** 2) <= 1;
+  }
+  return st.pts.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < st.r + pad);
+}
 function eraseAt(p) {
   const before = state.muscle.strokes.length;
-  state.muscle.strokes = state.muscle.strokes.filter(st => !st.pts.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < st.r + mc.size / mc.tf.s * 0.5));
+  state.muscle.strokes = state.muscle.strokes.filter(st => !hitsStroke(st, p, mc.size / mc.tf.s * 0.5));
   return before !== state.muscle.strokes.length;
 }
 function bindMuscle() {
   $$('[data-mtool]').forEach(b => b.onclick = () => {
     mc.tool = b.dataset.mtool; $$('[data-mtool]').forEach(x => x.classList.toggle('active', x === b));
+  });
+  $$('[data-mshape]').forEach(b => b.onclick = () => {
+    mc.shape = b.dataset.mshape; $$('[data-mshape]').forEach(x => x.classList.toggle('active', x === b));
   });
   $('#brushSize').oninput = e => (mc.size = +e.target.value);
   $('#muscleUndo').onclick = () => { state.muscle.strokes.pop(); drawMuscle(); changed(); };
@@ -836,17 +884,31 @@ function bindMuscle() {
     // pin the chart this case was painted on, so a later default-chart change can't misalign it
     if (!state.muscle.src) state.muscle.src = settings.chart;
     if (mc.tool === 'erase') { if (eraseAt(p)) drawMuscle(); mc.stroke = 'erase'; return; }
-    mc.stroke = { type: mc.tool, r: mc.size / mc.tf.s, pts: [p] };
+    mc.stroke = { type: mc.tool, shape: mc.shape, r: mc.size / mc.tf.s, pts: mc.shape === 'ellipse' ? [p, p] : [p] };
+    mc.smooth = p;
     state.muscle.strokes.push(mc.stroke); drawMuscle();
   });
   mCanvas.addEventListener('pointermove', e => {
     if (!mc.stroke) return;
-    const p = muscleImgPoint(e);
-    if (mc.stroke === 'erase') { if (eraseAt(p)) drawMuscle(); return; }
-    const last = mc.stroke.pts[mc.stroke.pts.length - 1];
-    if (Math.hypot(p[0] - last[0], p[1] - last[1]) > mc.stroke.r * 0.3) { mc.stroke.pts.push(p); drawMuscle(); }
+    if (mc.stroke === 'erase') { if (eraseAt(muscleImgPoint(e))) drawMuscle(); return; }
+    if (mc.stroke.shape === 'ellipse') { mc.stroke.pts[1] = muscleImgPoint(e); drawMuscle(); return; }
+    // brush: use every sampled point and follow the hand with a little lag, which irons out jitter
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    let added = false;
+    for (const ev of (evs.length ? evs : [e])) {
+      const raw = muscleImgPoint(ev); mc.raw = raw;
+      mc.smooth = [mc.smooth[0] + (raw[0] - mc.smooth[0]) * 0.4, mc.smooth[1] + (raw[1] - mc.smooth[1]) * 0.4];
+      const last = mc.stroke.pts[mc.stroke.pts.length - 1];
+      if (Math.hypot(mc.smooth[0] - last[0], mc.smooth[1] - last[1]) > mc.stroke.r * 0.15) { mc.stroke.pts.push(mc.smooth); added = true; }
+    }
+    if (added) drawMuscle();
   });
-  const end = () => { if (mc.stroke) { mc.stroke = null; changed(); } };
+  const end = () => {
+    if (!mc.stroke) return;
+    // the smoothed brush trails the pointer slightly; finish the stroke where the hand stopped
+    if (mc.stroke !== 'erase' && mc.stroke.shape !== 'ellipse' && mc.raw) { mc.stroke.pts.push(mc.raw); drawMuscle(); }
+    mc.stroke = null; mc.raw = null; changed();
+  };
   mCanvas.addEventListener('pointerup', end);
   mCanvas.addEventListener('pointercancel', end);
 }
@@ -924,7 +986,7 @@ async function init() {
   let s = emptyCase();
   if (saved) { try { s = Object.assign(emptyCase(), JSON.parse(saved)); } catch { /* ignore corrupt autosave */ } }
   await applyState(s);
-  if (document.fonts) document.fonts.ready.then(redrawAll);
+  if (document.fonts) document.fonts.ready.then(() => { redrawAll(); fitAll(); });
 
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(redrawAll, 150); });
 }

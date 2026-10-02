@@ -174,9 +174,9 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
 .func-block { flex: 1; display: flex; flex-direction: column; padding-top: 4mm; min-height: 0; }
 .func-title { font: 600 10pt "Montserrat", sans-serif; color: var(--teal); margin-bottom: 2mm; }
 .func-photos { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; min-height: 0; }
-.result { display: flex; gap: 2mm; align-items: flex-start; margin-top: 3mm; font-size: 11pt; min-height: 16mm; }
+.result { display: flex; gap: 2mm; align-items: flex-start; margin-top: 3mm; font-size: 11pt; }
 .result b { white-space: nowrap; line-height: 1.5; }
-.result .editable { flex: 1; min-height: 14mm; background: var(--field); padding: 1mm 2mm; line-height: 1.5; }
+.result .editable { flex: 1; height: 16mm; background: var(--field); padding: 1mm 2mm; line-height: 1.5; }
 
 /* ---------- Page 3 ---------- */
 .muscle-tools {
@@ -186,7 +186,9 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
   font-size: 12px;
 }
 .muscle-tools button { padding: 3px 9px; font-size: 12px; }
-.mt-btn.active { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: #eaf6f5; }
+.mt-sep { width: 1px; align-self: stretch; background: #c8ccd0; margin: 0 2px; }
+.mt-shape { padding: 3px 9px; font-size: 12px; }
+.mt-btn.active, .mt-shape.active { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: #eaf6f5; }
 .mt-size { display: flex; align-items: center; gap: 4px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 .dot.tight, .legend-dot.tight { background: var(--tight); }
@@ -212,9 +214,13 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
 
 .editable { outline: none; white-space: pre-wrap; font-size: 11pt; line-height: 1.5; }
 .editable:focus { box-shadow: 0 0 0 2px var(--teal); }
-.editable.box { background: var(--field); padding: 1.5mm 2.5mm; min-height: 16mm; }
-.muscle-lists .editable.box { min-height: 14mm; }
+.editable.box { background: var(--field); padding: 1.5mm 2.5mm; height: 22mm; }
+.muscle-lists .editable.box { height: 16mm; }
+/* Fixed-height boxes: long text shrinks its font (see fitText) instead of squeezing the pictures. */
+.result .editable, .editable.box { overflow: hidden; flex: none; }
+.result .editable { flex: 1; }
 .editable:empty::before { content: attr(data-placeholder); color: #9aa0a6; }
+.editable.overfull:not(:focus) { box-shadow: inset 0 0 0 2px #e3262e; } /* text still too long even at the smallest size */
 
 .recheck { display: flex; justify-content: flex-end; align-items: center; gap: 3mm; margin-top: 4mm; font-weight: 600; font-size: 10pt; }
 .recheck input { width: 60mm; height: 7mm; background: transparent; border-bottom: .3mm solid #333; }
@@ -275,6 +281,9 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
   .date-print { display: block; }
   .finding:empty { display: none; }
   .editable:empty::before { content: ""; }
+  .editable.overfull { box-shadow: none !important; }
+  .editable:focus, .finding:focus { box-shadow: none; }
+  input:focus { outline: none; }
   input::placeholder { color: transparent; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
