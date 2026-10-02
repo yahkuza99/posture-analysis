@@ -789,7 +789,7 @@ function buildEditorUI() {
 
 // ------------------------------------------------------------------ muscle chart (page 3)
 
-const mc = { tool: 'tight', shape: 'ellipse', size: 12, stroke: null, tf: null, img: null };
+const mc = { tool: 'tight', size: 12, stroke: null, tf: null, img: null };
 const mCanvas = $('#muscleCanvas');
 
 async function drawMuscle() {
@@ -862,9 +862,6 @@ function bindMuscle() {
   $$('[data-mtool]').forEach(b => b.onclick = () => {
     mc.tool = b.dataset.mtool; $$('[data-mtool]').forEach(x => x.classList.toggle('active', x === b));
   });
-  $$('[data-mshape]').forEach(b => b.onclick = () => {
-    mc.shape = b.dataset.mshape; $$('[data-mshape]').forEach(x => x.classList.toggle('active', x === b));
-  });
   $('#brushSize').oninput = e => (mc.size = +e.target.value);
   $('#muscleUndo').onclick = () => { state.muscle.strokes.pop(); drawMuscle(); changed(); };
   $('#muscleClear').onclick = () => { if (state.muscle.strokes.length && confirm('ล้างสีทั้งหมดบนภาพกล้ามเนื้อ?')) { state.muscle.strokes = []; drawMuscle(); changed(); } };
@@ -884,30 +881,18 @@ function bindMuscle() {
     // pin the chart this case was painted on, so a later default-chart change can't misalign it
     if (!state.muscle.src) state.muscle.src = settings.chart;
     if (mc.tool === 'erase') { if (eraseAt(p)) drawMuscle(); mc.stroke = 'erase'; return; }
-    mc.stroke = { type: mc.tool, shape: mc.shape, r: mc.size / mc.tf.s, pts: mc.shape === 'ellipse' ? [p, p] : [p] };
-    mc.smooth = p;
+    // drag along the muscle to draw an oval (the free brush was removed; old brush strokes still render)
+    mc.stroke = { type: mc.tool, shape: 'ellipse', r: mc.size / mc.tf.s, pts: [p, p] };
     state.muscle.strokes.push(mc.stroke); drawMuscle();
   });
   mCanvas.addEventListener('pointermove', e => {
     if (!mc.stroke) return;
     if (mc.stroke === 'erase') { if (eraseAt(muscleImgPoint(e))) drawMuscle(); return; }
-    if (mc.stroke.shape === 'ellipse') { mc.stroke.pts[1] = muscleImgPoint(e); drawMuscle(); return; }
-    // brush: use every sampled point and follow the hand with a little lag, which irons out jitter
-    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-    let added = false;
-    for (const ev of (evs.length ? evs : [e])) {
-      const raw = muscleImgPoint(ev); mc.raw = raw;
-      mc.smooth = [mc.smooth[0] + (raw[0] - mc.smooth[0]) * 0.4, mc.smooth[1] + (raw[1] - mc.smooth[1]) * 0.4];
-      const last = mc.stroke.pts[mc.stroke.pts.length - 1];
-      if (Math.hypot(mc.smooth[0] - last[0], mc.smooth[1] - last[1]) > mc.stroke.r * 0.15) { mc.stroke.pts.push(mc.smooth); added = true; }
-    }
-    if (added) drawMuscle();
+    mc.stroke.pts[1] = muscleImgPoint(e); drawMuscle();
   });
   const end = () => {
     if (!mc.stroke) return;
-    // the smoothed brush trails the pointer slightly; finish the stroke where the hand stopped
-    if (mc.stroke !== 'erase' && mc.stroke.shape !== 'ellipse' && mc.raw) { mc.stroke.pts.push(mc.raw); drawMuscle(); }
-    mc.stroke = null; mc.raw = null; changed();
+    mc.stroke = null; changed();
   };
   mCanvas.addEventListener('pointerup', end);
   mCanvas.addEventListener('pointercancel', end);

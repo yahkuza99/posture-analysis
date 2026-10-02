@@ -186,9 +186,7 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
   font-size: 12px;
 }
 .muscle-tools button { padding: 3px 9px; font-size: 12px; }
-.mt-sep { width: 1px; align-self: stretch; background: #c8ccd0; margin: 0 2px; }
-.mt-shape { padding: 3px 9px; font-size: 12px; }
-.mt-btn.active, .mt-shape.active { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: #eaf6f5; }
+.mt-btn.active { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: #eaf6f5; }
 .mt-size { display: flex; align-items: center; gap: 4px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 .dot.tight, .legend-dot.tight { background: var(--tight); }
