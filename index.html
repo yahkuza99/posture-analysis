@@ -151,27 +151,31 @@
 <div id="editor" class="editor no-print" hidden>
   <aside class="ed-side">
     <div class="ed-title" id="edTitle">แก้ไขรูป</div>
-    <div class="ed-group">
-      <div class="ed-label">เครื่องมือ</div>
-      <div class="ed-tools" id="edTools"></div>
-    </div>
-    <div class="ed-group">
-      <div class="ed-label">สี</div>
-      <div class="ed-colors" id="edColors"></div>
+    <div class="ed-group" id="edProtoWrap">
+      <div class="ed-label-row"><span class="ed-label">จุด Landmark <span id="edProtoCount"></span></span>
+        <label class="ed-toggle"><input type="checkbox" id="edShowNames" checked> แสดงชื่อจุด</label></div>
+      <ol class="ed-proto" id="edProto"></ol>
+      <div class="ed-row">
+        <button type="button" id="edSkip" title="Tab">ข้าม</button>
+        <button type="button" id="edRemovePt">ลบจุดนี้</button>
+        <button type="button" id="edResetPts">เริ่มใหม่</button>
+      </div>
     </div>
     <div class="ed-hint" id="edHint"></div>
+    <details class="ed-group" id="edFree">
+      <summary class="ed-label">เครื่องมืออิสระ (เส้น มุม ข้อความ สเกล)</summary>
+      <div class="ed-tools" id="edTools"></div>
+      <div class="ed-label" style="margin-top:8px">สี</div>
+      <div class="ed-colors" id="edColors"></div>
+    </details>
     <div class="ed-group ed-row">
       <button type="button" id="edUndo" title="Ctrl+Z">ย้อนกลับ</button>
       <button type="button" id="edDelete" title="Delete">ลบที่เลือก</button>
-      <button type="button" id="edClear">ล้างทั้งหมด</button>
-    </div>
-    <div class="ed-group">
-      <div class="ed-label">ค่าที่วัดได้</div>
-      <div id="edMeasures" class="ed-measures"></div>
+      <button type="button" id="edClear">ล้างเส้นอิสระ</button>
     </div>
     <div class="ed-help">
-      คลิก = วางจุด · ลากบนภาพ = เลื่อนภาพ<br>
-      หมุนลูกกลิ้ง = ซูม · ในโหมด "เลือก/ย้าย" ลากจุดเพื่อปรับตำแหน่ง
+      คลิก = วางจุด · กดค้างแล้วลาก = เลื่อนภาพ · ลูกกลิ้ง = ซูม<br>
+      ลากจุดที่วางแล้วเพื่อปรับตำแหน่ง · Tab = ข้ามจุด · Esc = ปิด
     </div>
     <div class="ed-group ed-row ed-bottom">
       <button type="button" id="edFit">พอดีจอ</button>
@@ -179,6 +183,17 @@
     </div>
   </aside>
   <div class="ed-stage" id="edStage"><canvas id="edCanvas"></canvas></div>
+  <aside class="ed-side ed-right">
+    <div class="ed-title">ผลวิเคราะห์</div>
+    <div class="ed-scale" id="edScaleInfo"></div>
+    <div id="edAnalysis" class="ed-analysis"></div>
+    <div class="ed-row"><button type="button" id="edInsert" class="primary">ใส่ที่เลือกลงผลตรวจ</button></div>
+    <div class="ed-group">
+      <div class="ed-label">ค่าจากเครื่องมืออิสระ</div>
+      <div id="edMeasures" class="ed-measures"></div>
+    </div>
+    <p class="ed-help">ผลวิเคราะห์คำนวณจากตำแหน่งจุดที่วาง ใช้เป็นข้อมูลประกอบ ผู้ประเมินควรตรวจทานก่อนใส่ในรายงาน</p>
+  </aside>
 </div>
 
 <!-- ============ Case list ============ -->
@@ -224,6 +239,7 @@
 <input id="photoFile" type="file" accept="image/*" hidden>
 <div id="toast" class="toast no-print" hidden></div>
 
+<script src="js/protocol.js?v=__APP_VERSION__"></script>
 <script src="js/app.js?v=__APP_VERSION__"></script>
 </body>
 </html>

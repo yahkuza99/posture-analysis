@@ -10,6 +10,7 @@ const FILES = [
   'fonts/OFL.txt',
   'css/style.css',
   'css/fonts.css',
+  'js/protocol.js',
   'js/app.js',
   'manifest.webmanifest',
   'icons/icon-192.png',

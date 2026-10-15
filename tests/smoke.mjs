@@ -44,9 +44,22 @@ try {
   await page.hover('[data-slot="front"]'); await page.click('[data-slot="front"] [data-a="edit"]');
   const b = await page.locator('#edCanvas').boundingBox();
   const at = (fx, fy) => page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
+  // guided landmarks: the editor opens on the first point of the anterior protocol
+  check((await page.locator('#edHint').innerText()).includes('1/12'), 'editor starts the guided landmark protocol');
+  const W = 600, H = 800;
+  const sc = Math.min((b.width - 40) / W, (b.height - 40) / H), ox = (b.width - W * sc) / 2, oy = (b.height - H * sc) / 2;
+  const px = (x, y) => page.mouse.click(b.x + ox + x * sc, b.y + oy + y * sc);
+  for (const [x, y] of [[288, 120], [312, 120], [240, 190], [360, 200], [262, 420], [338, 420],
+                        [272, 610], [328, 610], [271, 650], [329, 650], [268, 735], [334, 735]]) await px(x, y);
+  check((await page.locator('#edProtoCount').innerText()) === '12/12', 'all 12 anterior landmarks placed in order');
+  const analysis = await page.locator('#edAnalysis').innerText();
+  check(analysis.includes('ไหล่ขวาสูงกว่าซ้าย') && analysis.includes('Q-angle'), 'automatic analysis lists findings with the patient side');
+  const before = await page.locator('[data-findings="row1"] .finding').count();
+  await page.click('#edInsert');
+  check(await page.locator('[data-findings="row1"] .finding').count() > before, 'selected findings go into the report');
   await page.keyboard.press('g'); await at(0.5, 0.9);
   await page.keyboard.press('l'); await at(0.42, 0.25); await at(0.58, 0.27);
-  check((await page.locator('#edMeasures').innerText()).includes('ข้างขวาสูงกว่า'), 'level line reports the patient side (front view is mirrored)');
+  check((await page.locator('#edMeasures').innerText()).includes('ข้างขวาสูงกว่า'), 'free level line reports the patient side (front view is mirrored)');
   await page.click('#edDone');
 
   // case folder: choose, save, autosave, reopen from the list

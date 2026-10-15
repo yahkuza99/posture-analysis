@@ -10,14 +10,14 @@
 const APP_VERSION = '__APP_VERSION__'; // stamped with the commit on deploy
 
 const SLOTS = {
-  front:     { label: 'ด้านหน้า (Anterior)',       view: 'front', row: 'row1' },
-  back:      { label: 'ด้านหลัง (Posterior)',      view: 'back',  row: 'row1' },
-  sideR:     { label: 'ด้านข้างขวา (Rt. lateral)', view: 'side',  row: 'row2' },
-  sideL:     { label: 'ด้านข้างซ้าย (Lt. lateral)', view: 'side',  row: 'row2' },
-  slsL:      { label: 'ยืนขาซ้าย (Single leg stance Lt.)', view: 'back', text: 'functional.sls' },
-  slsR:      { label: 'ยืนขาขวา (Single leg stance Rt.)', view: 'back', text: 'functional.sls' },
-  squatBack: { label: 'Squat ด้านหลัง',  view: 'back', text: 'functional.squat' },
-  squatSide: { label: 'Squat ด้านข้าง',  view: 'side', text: 'functional.squat' },
+  front:     { label: 'ด้านหน้า (Anterior)',       view: 'front', row: 'row1', protocol: 'anterior' },
+  back:      { label: 'ด้านหลัง (Posterior)',      view: 'back',  row: 'row1', protocol: 'posterior' },
+  sideR:     { label: 'ด้านข้างขวา (Rt. lateral)', view: 'side',  row: 'row2', protocol: 'lateral', prefix: 'ด้านขวา: ' },
+  sideL:     { label: 'ด้านข้างซ้าย (Lt. lateral)', view: 'side',  row: 'row2', protocol: 'lateral', prefix: 'ด้านซ้าย: ' },
+  slsL:      { label: 'ยืนขาซ้าย (Single leg stance Lt.)', view: 'back', text: 'functional.sls', protocol: 'sls', prefix: 'ยืนขาซ้าย: ' },
+  slsR:      { label: 'ยืนขาขวา (Single leg stance Rt.)', view: 'back', text: 'functional.sls', protocol: 'sls', prefix: 'ยืนขาขวา: ' },
+  squatBack: { label: 'Squat ด้านหลัง',  view: 'back', text: 'functional.squat', protocol: 'squatBack' },
+  squatSide: { label: 'Squat ด้านข้าง',  view: 'side', text: 'functional.squat', protocol: 'squatSide' },
 };
 
 // Quick-insert findings. Edit this list to match the clinic's wording.
@@ -42,7 +42,10 @@ const PRESET_LABEL = { '@qangle': 'Q-angle (กรอกจากค่าที
 
 const COLORS = ['#e3262e', '#2dbd3a', '#f4c20d', '#1e88e5', '#ffffff', '#111111'];
 
+const { PROTOCOLS, analyze } = window.PostureProtocol;
+
 const TOOLS = [
+  { id: 'guide',  label: 'วางจุดตามลำดับ', key: 'M' },
   { id: 'select', label: 'เลือก/ย้าย', key: 'V' },
   { id: 'point',  label: 'จุด',        key: 'P', color: '#f4c20d', clicks: 1 },
   { id: 'plumb',  label: 'เส้นดิ่ง',    key: 'G', color: '#2dbd3a', clicks: 1 },
@@ -51,6 +54,7 @@ const TOOLS = [
   { id: 'angle',  label: 'มุม',         key: 'A', color: '#e3262e', clicks: 3 },
   { id: 'qangle', label: 'Q-angle',     key: 'Q', color: '#f4c20d', clicks: 3 },
   { id: 'text',   label: 'ข้อความ',     key: 'T', color: '#111111', clicks: 1 },
+  { id: 'scale',  label: 'ตั้งสเกล (ซม.)', key: 'K', color: '#ffffff', clicks: 2 },
 ];
 const TOOL_HINTS = {
   select: 'คลิกเส้น/จุดเพื่อเลือก ลากจุดเพื่อปรับตำแหน่ง ลากตัวเส้นเพื่อย้ายทั้งเส้น',
@@ -61,6 +65,7 @@ const TOOL_HINTS = {
   angle:  ['คลิกปลายแขนมุมที่ 1', 'คลิกจุดยอดมุม', 'คลิกปลายแขนมุมที่ 2'],
   qangle: ['คลิก ASIS', 'คลิกกึ่งกลางลูกสะบ้า (Patella)', 'คลิก Tibial tuberosity'],
   text:   'คลิกตำแหน่งที่จะวางข้อความ',
+  scale:  ['คลิกปลายด้านหนึ่งของสิ่งที่รู้ความยาวจริง (เช่น ช่องกริด หรือไม้วัด)', 'คลิกอีกปลายหนึ่ง แล้วใส่ความยาวจริงเป็นเซนติเมตร'],
 };
 
 // ------------------------------------------------------------------ state
@@ -525,6 +530,8 @@ function qSide(s, photo, view) {
 function qAnglesFor(slotId) {
   const photo = state.photos[slotId]; const r = { Rt: null, Lt: null };
   if (!photo) return r;
+  const q = analysisOf(slotId)?.q;
+  if (q) { r.Rt = q.R ?? null; r.Lt = q.L ?? null; }
   photo.shapes.filter(s => s.type === 'qangle').forEach(s => {
     const side = qSide(s, photo, SLOTS[slotId].view); if (side) r[side] = qAngle(s);
   });
@@ -540,6 +547,14 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
   const P = p => [p[0] * s + tx, p[1] * s + ty];
   ctx.drawImage(img, tx, ty, photo.w * s, photo.h * s);
   const top = ty, bottom = ty + photo.h * s;
+  if (opts.analysis) drawAnalysis(ctx, opts.analysis, P, top, bottom, u);
+  if (opts.protocol) drawLandmarks(ctx, photo, opts.protocol, P, u, opts);
+  if (opts.editor && photo.scale) {
+    const [a, b] = [P(photo.scale.a), P(photo.scale.b)];
+    ctx.save(); ctx.lineWidth = 1.6 * u; ctx.setLineDash([5 * u, 4 * u]); ctx.strokeStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.restore();
+    label(ctx, `${photo.scale.cm} ซม.`, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 10 * u, u, '#111');
+  }
 
   photo.shapes.forEach((sh, idx) => {
     const sel = opts.selected === idx;
@@ -605,6 +620,57 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
     ctx.restore();
   }
 }
+const SHIFT_OK = '#2dbd3a', SHIFT_BAD = '#ff8f00';
+function drawAnalysis(ctx, an, P, top, bottom, u) {
+  const line = (a, b, color, w, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = w * u; ctx.setLineDash(dash ? [5 * u, 4 * u] : []);
+    ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+  };
+  ctx.save(); ctx.lineCap = 'round';
+  for (const l of an.lines) {
+    switch (l.t) {
+      case 'plumb': { const x = P([l.x, 0])[0]; line([x, top], [x, bottom], '#2dbd3a', 2.2); break; }
+      case 'level': {
+        const a = P(l.a), b = P(l.b), dx = b[0] - a[0], dy = b[1] - a[1], e = 0.2;
+        line([a[0] - dx * e, a[1] - dy * e], [b[0] + dx * e, b[1] + dy * e], l.color, l.thin ? 1.6 : 2.2);
+        const R = a[0] > b[0] ? a : b; label(ctx, l.label, R[0] + Math.abs(dx) * e + 4 * u, R[1], u, l.color, 'left');
+        break;
+      }
+      case 'q': {
+        const a = P(l.a), v = P(l.v), b = P(l.b);
+        line(a, v, '#f4c20d', 2); line(v, b, '#f4c20d', 2);
+        const dx = v[0] - a[0], dy = v[1] - a[1], L = Math.hypot(dx, dy) || 1, ext = Math.hypot(b[0] - v[0], b[1] - v[1]) * 1.3;
+        line(v, [v[0] + dx / L * ext, v[1] + dy / L * ext], '#f4c20d', 1.2, true);
+        const o = l.outward || 1;
+        label(ctx, l.label, v[0] + o * 12 * u, v[1] + 6 * u, u, '#b8860b', o > 0 ? 'left' : 'right');
+        break;
+      }
+      case 'seg': line(P(l.a), P(l.b), l.color, 2, l.dash); break;
+      case 'shift': line(P(l.from), P(l.to), l.ok ? SHIFT_OK : SHIFT_BAD, l.ok ? 1.4 : 2.4); break;
+      case 'cva': {
+        const c = P(l.c7), t = P(l.tragus), dir = Math.sign(t[0] - c[0]) || 1, len = Math.hypot(t[0] - c[0], t[1] - c[1]);
+        line(c, t, '#1e88e5', 2); line(c, [c[0] + dir * len, c[1]], '#1e88e5', 1.4, true);
+        label(ctx, l.label, c[0] + dir * (len + 6 * u), c[1], u, '#1e88e5', dir > 0 ? 'left' : 'right');
+        break;
+      }
+      case 'text': { const p = P(l.at); label(ctx, l.text, p[0] + 10 * u, p[1], u, '#1e5aa8', 'left'); break; }
+    }
+  }
+  ctx.restore();
+}
+function drawLandmarks(ctx, photo, protocolId, P, u, opts) {
+  const lm = photo.lm || {};
+  for (const pt of PROTOCOLS[protocolId].points) {
+    const p = lm[pt.id]; if (!p) continue;
+    const q = P(p);
+    if (opts.current === pt.id) {
+      ctx.save(); ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2 * u;
+      ctx.beginPath(); ctx.arc(q[0], q[1], 8.5 * u, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+    landmark(ctx, q, u, '#f4c20d');
+    if (opts.names) label(ctx, pt.code, q[0], q[1] + 13 * u, u * 0.82, '#111'); // below the point, clear of angle labels
+  }
+}
 function landmark(ctx, [x, y], u, color) {
   ctx.save(); ctx.shadowBlur = 0; ctx.setLineDash([]);
   ctx.beginPath(); ctx.arc(x, y, 4.2 * u, 0, Math.PI * 2);
@@ -619,7 +685,7 @@ function label(ctx, txt, x, y, u, color, align = 'center', boxed = false) {
   ctx.textAlign = align; ctx.textBaseline = 'middle';
   const lines = String(txt).split('\n'); const lh = 13 * u;
   const w = Math.max(...lines.map(l => ctx.measureText(l).width));
-  const x0 = align === 'left' ? x : x - w / 2;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
   ctx.fillStyle = 'rgba(255,255,255,.88)';
   const pad = 2.5 * u;
   ctx.fillRect(x0 - pad, y - lh / 2 - pad / 2, w + pad * 2, lh * lines.length + pad);
@@ -647,12 +713,14 @@ function slotTransform(photo, W, H) {
 }
 
 // Frame the person, not the photo: centre on the plumb line when there is one.
-function plumbX(photo) {
+function plumbX(id) {
+  const photo = state.photos[id]; if (!photo) return null;
   const p = photo.shapes.find(sh => sh.type === 'plumb');
-  return p ? p.pts[0][0] : null;
+  return p ? p.pts[0][0] : analysisOf(id)?.plumbX ?? null;
 }
-function centerView(photo) {
-  photo.view = { z: photo.view?.z || 1, cx: plumbX(photo) ?? photo.w / 2, cy: photo.h / 2 };
+function centerView(id) {
+  const photo = state.photos[id];
+  photo.view = { z: photo.view?.z || 1, cx: plumbX(id) ?? photo.w / 2, cy: photo.h / 2 };
 }
 
 function renderSlot(id) {
@@ -677,6 +745,10 @@ function renderSlot(id) {
   drawSlot(id);
 }
 
+function analysisOf(id) {
+  const photo = state.photos[id]; const proto = SLOTS[id].protocol;
+  return photo && proto ? analyze(photo, proto) : null;
+}
 function drawSlot(id) {
   const el = slotEl(id); const photo = state.photos[id]; const c = el.querySelector('canvas');
   if (!photo || !c) return;
@@ -687,7 +759,7 @@ function drawSlot(id) {
   loadImage(photo.src).then(img => {
     const tf = slotTransform(photo, c.width, c.height);
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-    drawPhoto(ctx, photo, img, tf, c.height / 360);
+    drawPhoto(ctx, photo, img, tf, c.height / 360, { analysis: analysisOf(id), protocol: SLOTS[id].protocol });
   });
 }
 
@@ -698,8 +770,8 @@ async function setPhoto(id, file) {
   if (!file || !file.type.startsWith('image/')) { toast('กรุณาเลือกไฟล์รูปภาพ'); return; }
   const { src, w, h } = await fileToDataURL(file);
   const old = state.photos[id];
-  if (old && old.shapes.length && !confirm('เปลี่ยนรูปแล้วจุดและเส้นเดิมจะถูกลบ ต้องการเปลี่ยนหรือไม่?')) return;
-  state.photos[id] = { src, w, h, view: { z: 1, cx: w / 2, cy: h / 2 }, shapes: [] };
+  if (old && (old.shapes.length || Object.keys(old.lm || {}).length) && !confirm('เปลี่ยนรูปแล้วจุดและเส้นเดิมจะถูกลบ ต้องการเปลี่ยนหรือไม่?')) return;
+  state.photos[id] = { src, w, h, view: { z: 1, cx: w / 2, cy: h / 2 }, shapes: [], lm: {} };
   renderSlot(id); changed();
 }
 
@@ -715,7 +787,7 @@ function bindSlots() {
       if (a === 'replace') pickPhoto(id);
       if (a === 'remove' && confirm('ลบรูปนี้พร้อมจุดและเส้นทั้งหมด?')) { delete state.photos[id]; renderSlot(id); changed(); }
       if (a === 'in' || a === 'out') { photo.view.z = Math.max(0.3, Math.min(8, photo.view.z * (a === 'in' ? 1.15 : 1 / 1.15))); drawSlot(id); changed(); }
-      if (a === 'reset') { photo.view.z = 1; centerView(photo); drawSlot(id); changed(); }
+      if (a === 'reset') { photo.view.z = 1; centerView(id); drawSlot(id); changed(); }
     });
     el.addEventListener('dblclick', e => { if (state.photos[id] && !e.target.closest('button')) openEditor(id); });
 
@@ -760,18 +832,107 @@ const ed = {
 const edCanvas = $('#edCanvas');
 
 function openEditor(id) {
-  ed.id = id; ed.photo = state.photos[id];
-  ed.history = []; ed.selected = -1; ed.pending = null; ed.plumbAtOpen = plumbX(ed.photo);
+  ed.id = id; ed.photo = state.photos[id]; ed.photo.lm ??= {};
+  ed.protoId = SLOTS[id].protocol; ed.checks = {};
+  ed.history = []; ed.selected = -1; ed.selLm = null; ed.pending = null; ed.plumbAtOpen = plumbX(id);
+  ed.cur = nextMissing(null);
   $('#edTitle').textContent = 'วางจุด/เส้น — ' + SLOTS[id].label;
   $('#editor').hidden = false;
   document.body.style.overflow = 'hidden';
-  loadImage(ed.photo.src).then(img => { ed.img = img; fitEditor(); setTool(ed.tool); });
+  loadImage(ed.photo.src).then(img => { ed.img = img; fitEditor(); setTool(ed.cur ? 'guide' : 'select'); });
 }
 function closeEditor() {
   $('#editor').hidden = true; document.body.style.overflow = '';
-  const id = ed.id, photo = ed.photo; ed.id = null; ed.photo = null;
-  if (plumbX(photo) !== ed.plumbAtOpen) centerView(photo); // plumb line added or moved: re-centre on it
+  const id = ed.id; ed.id = null; ed.photo = null;
+  if (plumbX(id) !== ed.plumbAtOpen) centerView(id); // plumb line added or moved: re-centre on it
   drawSlot(id); changed();
+}
+
+// ---- landmark protocol
+const protoPoints = () => PROTOCOLS[ed.protoId].points;
+// next landmark without a position, starting after `from` and wrapping around
+function nextMissing(from) {
+  const pts = protoPoints(), lm = ed.photo.lm, start = from ? pts.findIndex(p => p.id === from) + 1 : 0;
+  for (let k = 0; k < pts.length; k++) { const p = pts[(start + k) % pts.length]; if (!lm[p.id]) return p.id; }
+  return null;
+}
+function renderProto() {
+  const pts = protoPoints(), lm = ed.photo.lm;
+  $('#edProtoCount').textContent = `${pts.filter(p => lm[p.id]).length}/${pts.length}`;
+  const ol = $('#edProto');
+  const key = JSON.stringify([ed.id, ed.cur, Object.keys(lm).sort()]);
+  if (ol.dataset.key === key) return; ol.dataset.key = key;
+  ol.innerHTML = '';
+  pts.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = (lm[p.id] ? 'done' : '') + (p.id === ed.cur ? ' cur' : '');
+    li.innerHTML = `<span class="st"></span><span class="nm">${i + 1}. ${esc(p.name)}<small>${esc(p.code)}</small></span>`;
+    li.onclick = () => { ed.cur = p.id; ed.selLm = lm[p.id] ? p.id : null; setTool('guide'); };
+    ol.append(li);
+  });
+  ol.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
+}
+function skipPoint() { if (ed.protoId) { ed.cur = nextMissing(ed.cur) || ed.cur; updateHint(); drawEditor(); } }
+
+// ---- automatic analysis panel
+function renderAnalysis() {
+  const box = $('#edAnalysis');
+  const an = analyze(ed.photo, ed.protoId);
+  const sc = ed.photo.scale;
+  $('#edScaleInfo').textContent = sc ? `สเกล: ${sc.cm} ซม. = ${Math.round(sc.pxPerCm * sc.cm)} px — ระยะแสดงเป็นเซนติเมตร` : 'ยังไม่ได้ตั้งสเกล — ระยะการเยื้องแสดงเป็นทิศทาง (ตั้งสเกลได้ที่เครื่องมืออิสระ)';
+  const key = JSON.stringify(an.findings.map(f => f.text));
+  if (box.dataset.key === key) return; box.dataset.key = key;
+  if (!an.findings.length) {
+    box.innerHTML = '<div class="none">วางจุดตามรายการทางซ้าย ระบบจะลากเส้นอ้างอิงและสรุปผลให้ที่นี่</div>';
+    $('#edInsert').disabled = true; return;
+  }
+  $('#edInsert').disabled = false;
+  box.innerHTML = '';
+  an.findings.forEach(f => {
+    const row = document.createElement('label');
+    row.className = 'ed-finding' + (f.flag ? ' flag' : '') + (f.note ? ' note' : '');
+    if (f.note) { row.textContent = f.text; box.append(row); return; }
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    cb.checked = ed.checks[f.key] ?? !!f.flag;
+    cb.onchange = () => (ed.checks[f.key] = cb.checked);
+    const span = document.createElement('span'); span.textContent = f.text;
+    row.append(cb, span); box.append(row);
+  });
+}
+function insertAnalysis() {
+  const an = analyze(ed.photo, ed.protoId);
+  const picked = an.findings.filter(f => !f.note && (ed.checks[f.key] ?? !!f.flag)).map(f => f.text);
+  if (!picked.length) { toast('ยังไม่ได้เลือกข้อใด'); return; }
+  const cfg = SLOTS[ed.id], pre = cfg.prefix || '';
+  if (cfg.row) { picked.forEach(t => state.findings[cfg.row].push(pre + t)); renderFindings(cfg.row); }
+  else {
+    const cur = getPath(state, cfg.text) || '';
+    const add = pre + picked.join(', ');
+    setPath(state, cfg.text, cur ? cur + '\n' + add : add);
+    const el = $(`[data-bind-text="${cfg.text}"]`); el.innerText = getPath(state, cfg.text); fitText(el);
+  }
+  changed(); toast(`ใส่ ${picked.length} ข้อลงผลตรวจแล้ว`);
+}
+
+// ---- magnifier: a 3× view under the cursor while placing points
+function drawLoupe(ctx, dpr) {
+  if (!ed.cursor || ed.tool === 'select' || ed.pan || ed.drag) return;
+  const [cx, cy] = [ed.cursor[0] * dpr, ed.cursor[1] * dpr], R = 70 * dpr, Z = 3, gap = 26 * dpr;
+  let lx = cx - R - gap, ly = cy - R - gap;
+  if (lx - R < 0) lx = cx + R + gap;
+  if (ly - R < 0) ly = cy + R + gap;
+  const src = (2 * R) / Z;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.closePath();
+  ctx.fillStyle = '#2b2e33'; ctx.fill(); ctx.clip();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(edCanvas, cx - src / 2, cy - src / 2, src, src, lx - R, ly - R, 2 * R, 2 * R);
+  ctx.strokeStyle = 'rgba(0,229,255,.95)'; ctx.lineWidth = 1.2 * dpr;
+  ctx.beginPath(); ctx.moveTo(lx - R, ly); ctx.lineTo(lx - 6 * dpr, ly); ctx.moveTo(lx + 6 * dpr, ly); ctx.lineTo(lx + R, ly);
+  ctx.moveTo(lx, ly - R); ctx.lineTo(lx, ly - 6 * dpr); ctx.moveTo(lx, ly + 6 * dpr); ctx.lineTo(lx, ly + R); ctx.stroke();
+  ctx.restore();
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3 * dpr;
+  ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
 }
 function fitEditor() {
   const st = $('#edStage'); const W = st.clientWidth, H = st.clientHeight, p = ed.photo;
@@ -791,8 +952,13 @@ function drawEditor() {
   ctx.fillStyle = '#2b2e33'; ctx.fillRect(0, 0, edCanvas.width, edCanvas.height);
   const tf = { s: ed.s * dpr, tx: ed.tx * dpr, ty: ed.ty * dpr };
   const cursor = ed.cursor && [ed.cursor[0] * dpr, ed.cursor[1] * dpr];
-  drawPhoto(ctx, ed.photo, ed.img, tf, 1.25 * dpr, { selected: ed.selected, pending: ed.pending, cursor });
-  renderMeasures();
+  drawPhoto(ctx, ed.photo, ed.img, tf, 1.25 * dpr, {
+    selected: ed.selected, pending: ed.pending, cursor, editor: true,
+    analysis: analyze(ed.photo, ed.protoId), protocol: ed.protoId,
+    names: $('#edShowNames').checked, current: ed.tool === 'guide' ? ed.cur : ed.selLm,
+  });
+  drawLoupe(ctx, dpr);
+  renderProto(); renderAnalysis(); renderMeasures();
 }
 
 function toImg(e) {
@@ -802,28 +968,49 @@ function toImg(e) {
 }
 function toScreen(p) { return [p[0] * ed.s + ed.tx, p[1] * ed.s + ed.ty]; }
 
-function snapshot() { ed.history.push(JSON.stringify(ed.photo.shapes)); if (ed.history.length > 100) ed.history.shift(); }
+function snapshot() {
+  ed.history.push(JSON.stringify({ shapes: ed.photo.shapes, lm: ed.photo.lm, scale: ed.photo.scale || null }));
+  if (ed.history.length > 100) ed.history.shift();
+}
 function undo() {
   if (ed.pending && ed.pending.pts.length) { ed.pending.pts.pop(); updateHint(); drawEditor(); return; }
   const h = ed.history.pop(); if (h == null) return;
-  ed.photo.shapes = JSON.parse(h); ed.selected = -1; drawEditor();
+  const st = JSON.parse(h);
+  ed.photo.shapes = st.shapes; ed.photo.lm = st.lm; ed.photo.scale = st.scale || undefined;
+  ed.selected = -1; ed.selLm = null; updateHint(); drawEditor();
 }
 
 function setTool(id) {
   ed.tool = id; ed.pending = null;
   const t = TOOLS.find(t => t.id === id);
   ed.color = t.color || ed.color;
+  if (id !== 'guide' && id !== 'select') $('#edFree').open = true;
   $$('#edTools button').forEach(b => b.classList.toggle('active', b.dataset.tool === id));
   $$('#edColors button').forEach(b => b.classList.toggle('active', b.dataset.color === ed.color));
   edCanvas.style.cursor = id === 'select' ? 'default' : 'crosshair';
   updateHint(); drawEditor();
 }
 function updateHint() {
+  if (ed.tool === 'guide') {
+    const pts = protoPoints(), i = pts.findIndex(p => p.id === ed.cur), p = pts[i];
+    $('#edHint').innerHTML = p
+      ? `<b>${i + 1}/${pts.length} ${esc(p.name)}</b><br>${esc(p.hint)}${ed.photo.lm[p.id] ? '<br><small>วางแล้ว — คลิกใหม่เพื่อย้าย หรือลากจุดเดิม</small>' : ''}`
+      : 'วางครบทุกจุดแล้ว — ลากจุดเพื่อปรับ หรือเลือกจุดจากรายการเพื่อวางใหม่';
+    return;
+  }
   const h = TOOL_HINTS[ed.tool];
   $('#edHint').textContent = Array.isArray(h) ? h[ed.pending ? ed.pending.pts.length : 0] : h;
 }
 
 // hit testing in screen px
+function hitLandmark(sp) {
+  if (!ed.protoId) return null;
+  for (const p of protoPoints()) {
+    const v = ed.photo.lm[p.id]; if (!v) continue;
+    const q = toScreen(v); if (Math.hypot(q[0] - sp[0], q[1] - sp[1]) < 10) return p.id;
+  }
+  return null;
+}
 function hitHandle(sp) {
   const shapes = ed.photo.shapes;
   for (let i = shapes.length - 1; i >= 0; i--) {
@@ -864,7 +1051,13 @@ function edPointerDown(e) {
   }
   if (e.button !== 0) return;
 
+  // a placed landmark can be dragged in the guide and select tools
+  if (ed.tool === 'guide' || ed.tool === 'select') {
+    const id = hitLandmark(screen);
+    if (id) { snapshot(); ed.selLm = id; ed.selected = -1; if (ed.tool === 'guide') ed.cur = id; ed.drag = { kind: 'lm', id }; updateHint(); drawEditor(); return; }
+  }
   if (ed.tool === 'select') {
+    ed.selLm = null;
     const h = hitHandle(screen);
     if (h) { snapshot(); ed.selected = h.i; ed.drag = { kind: 'handle', ...h }; drawEditor(); return; }
     const b = hitBody(screen);
@@ -877,6 +1070,14 @@ function edPointerDown(e) {
   ed.press = { x: e.clientX, y: e.clientY, tx: ed.tx, ty: ed.ty, img };
 }
 function placePoint(img) {
+  if (ed.tool === 'guide') {
+    if (!ed.cur) return;
+    snapshot(); ed.photo.lm[ed.cur] = img; ed.selLm = null;
+    const next = nextMissing(ed.cur);
+    if (next) ed.cur = next;
+    else { ed.cur = null; toast('วางครบทุกจุดแล้ว — ตรวจผลวิเคราะห์ทางขวา'); }
+    updateHint(); drawEditor(); return;
+  }
   const t = TOOLS.find(t => t.id === ed.tool);
   if (!ed.pending) ed.pending = { type: t.id, color: ed.color, pts: [] };
   ed.pending.pts.push(img);
@@ -885,6 +1086,12 @@ function placePoint(img) {
     if (sh.type === 'text') {
       const txt = prompt('ข้อความ:'); if (!txt) { updateHint(); drawEditor(); return; }
       sh.text = txt;
+    }
+    if (sh.type === 'scale') {
+      const cm = parseFloat(String(prompt('ระยะจริงระหว่างสองจุด (เซนติเมตร):', '10') || '').replace(',', '.'));
+      const px = Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]);
+      if (cm > 0 && px > 0) { snapshot(); ed.photo.scale = { a: sh.pts[0], b: sh.pts[1], cm, pxPerCm: px / cm }; toast(`ตั้งสเกลแล้ว: ${cm} ซม.`); }
+      setTool('select'); return;
     }
     snapshot(); ed.photo.shapes.push(sh); ed.selected = ed.photo.shapes.length - 1;
   }
@@ -897,14 +1104,16 @@ function edPointerMove(e) {
     ed.pan = ed.press; ed.press = null; edCanvas.style.cursor = 'grabbing';
   }
   if (ed.pan) { ed.tx = ed.pan.tx + e.clientX - ed.pan.x; ed.ty = ed.pan.ty + e.clientY - ed.pan.y; drawEditor(); return; }
+  if (ed.drag && ed.drag.kind === 'lm') { ed.photo.lm[ed.drag.id] = img; ed.cursor = screen; drawEditor(); return; }
   if (ed.drag) {
     const sh = ed.photo.shapes[ed.drag.i];
     if (ed.drag.kind === 'handle') sh.pts[ed.drag.j] = img;
     else { const dx = img[0] - ed.drag.last[0], dy = img[1] - ed.drag.last[1]; sh.pts = sh.pts.map(p => [p[0] + dx, p[1] + dy]); ed.drag.last = img; }
     drawEditor(); return;
   }
-  if (ed.tool === 'select') edCanvas.style.cursor = hitHandle(screen) ? 'move' : hitBody(screen) >= 0 ? 'pointer' : 'default';
-  if (ed.pending) { ed.cursor = screen; drawEditor(); }
+  if (ed.tool === 'select') edCanvas.style.cursor = hitLandmark(screen) || hitHandle(screen) ? 'move' : hitBody(screen) >= 0 ? 'pointer' : 'default';
+  if (ed.tool === 'guide') edCanvas.style.cursor = hitLandmark(screen) ? 'move' : 'crosshair';
+  if (ed.tool !== 'select' || ed.pending) { ed.cursor = screen; drawEditor(); }
 }
 function edPointerUp() {
   if (ed.press) { const p = ed.press; ed.press = null; if (p.img) placePoint(p.img); }
@@ -920,6 +1129,7 @@ function edWheel(e) {
   drawEditor();
 }
 function deleteSelected() {
+  if (ed.selLm) { snapshot(); delete ed.photo.lm[ed.selLm]; ed.cur = ed.selLm; ed.selLm = null; updateHint(); drawEditor(); return; }
   if (ed.selected < 0) return;
   snapshot(); ed.photo.shapes.splice(ed.selected, 1); ed.selected = -1; drawEditor();
 }
@@ -951,7 +1161,7 @@ function insertMeasure(txt) {
 }
 
 function buildEditorUI() {
-  $('#edTools').innerHTML = TOOLS.map(t => `<button type="button" data-tool="${t.id}">${t.label}<kbd>${t.key}</kbd></button>`).join('');
+  $('#edTools').innerHTML = TOOLS.filter(t => t.id !== 'guide').map(t => `<button type="button" data-tool="${t.id}">${t.label}<kbd>${t.key}</kbd></button>`).join('');
   $('#edColors').innerHTML = COLORS.map(c => `<button type="button" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('');
   $('#edTools').onclick = e => { const b = e.target.closest('button'); if (b) setTool(b.dataset.tool); };
   $('#edColors').onclick = e => {
@@ -962,8 +1172,13 @@ function buildEditorUI() {
     $$('#edColors button').forEach(x => x.classList.toggle('active', x === b)); drawEditor();
   };
   $('#edUndo').onclick = undo;
+  $('#edSkip').onclick = skipPoint;
+  $('#edRemovePt').onclick = () => { const id = ed.selLm || ed.cur; if (id && ed.photo.lm[id]) { snapshot(); delete ed.photo.lm[id]; ed.cur = id; ed.selLm = null; setTool('guide'); } };
+  $('#edResetPts').onclick = () => { if (Object.keys(ed.photo.lm).length && confirm('ลบจุด landmark ทั้งหมดของรูปนี้ แล้วเริ่มวางใหม่?')) { snapshot(); ed.photo.lm = {}; ed.cur = nextMissing(null); setTool('guide'); } };
+  $('#edShowNames').onchange = drawEditor;
+  $('#edInsert').onclick = insertAnalysis;
   $('#edDelete').onclick = deleteSelected;
-  $('#edClear').onclick = () => { if (ed.photo.shapes.length && confirm('ลบจุดและเส้นทั้งหมดในรูปนี้?')) { snapshot(); ed.photo.shapes = []; ed.selected = -1; drawEditor(); } };
+  $('#edClear').onclick = () => { if (ed.photo.shapes.length && confirm('ลบเส้นและจุดที่วาดด้วยเครื่องมืออิสระทั้งหมด? (จุด landmark ยังอยู่)')) { snapshot(); ed.photo.shapes = []; ed.selected = -1; drawEditor(); } };
   $('#edFit').onclick = fitEditor;
   $('#edDone').onclick = closeEditor;
 
@@ -971,7 +1186,7 @@ function buildEditorUI() {
   edCanvas.addEventListener('pointermove', edPointerMove);
   edCanvas.addEventListener('pointerup', edPointerUp);
   edCanvas.addEventListener('pointercancel', () => { ed.press = null; edPointerUp(); });
-  edCanvas.addEventListener('pointerleave', () => { ed.cursor = null; if (ed.pending) drawEditor(); });
+  edCanvas.addEventListener('pointerleave', () => { ed.cursor = null; drawEditor(); });
   edCanvas.addEventListener('wheel', edWheel, { passive: false });
   edCanvas.addEventListener('contextmenu', e => e.preventDefault());
   edCanvas.addEventListener('dblclick', () => {
@@ -986,6 +1201,7 @@ function buildEditorUI() {
     if (!ed.id) return;
     if (e.target.matches('input, textarea, [contenteditable="true"]')) return;
     if (e.key === ' ') { ed.space = true; e.preventDefault(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); setTool('guide'); skipPoint(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
     if (e.key === 'Escape') { if (ed.pending) { ed.pending = null; updateHint(); drawEditor(); } else closeEditor(); return; }
