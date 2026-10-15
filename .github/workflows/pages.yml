@@ -15,7 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -23,8 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      # Stamp the commit into the CSS/JS links so browsers fetch the new files after each deploy
-      - run: sed -i "s/?v=dev/?v=${GITHUB_SHA::7}/g" index.html
+      # Stamp the commit into the page, app and service worker: browsers fetch fresh files and the
+      # offline copy updates (a changed sw.js is what triggers the in-app "new version" prompt)
+      - run: sed -i "s/__APP_VERSION__/${GITHUB_SHA::7}/g" index.html sw.js js/app.js
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .

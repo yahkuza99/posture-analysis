@@ -7,6 +7,8 @@
 
 // ------------------------------------------------------------------ config
 
+const APP_VERSION = '__APP_VERSION__'; // stamped with the commit on deploy
+
 const SLOTS = {
   front:     { label: 'ด้านหน้า (Anterior)',       view: 'front', row: 'row1' },
   back:      { label: 'ด้านหลัง (Posterior)',      view: 'back',  row: 'row1' },
@@ -63,9 +65,14 @@ const TOOL_HINTS = {
 
 // ------------------------------------------------------------------ state
 
+function newId() {
+  return (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
 function emptyCase() {
   return {
     version: 1,
+    id: newId(),
+    fileName: null,                    // name of this case's file in the chosen folder, once saved there
     patient: { name: '', lastname: '', cn: '', therapist: '', date: todayISO(), rechecked: '' },
     photos: {},                        // slotId -> { src, w, h, view:{z,cx,cy}, shapes:[] }
     findings: { row1: [], row2: [] },  // arrays of strings
@@ -147,41 +154,242 @@ async function idbGet(key) {
   });
 }
 
-let saveTimer;
+const hhmm = () => new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+let saveTimer, folderTimer, dirty = false, folderWritePending = false;
+function setStatus(t) { $('#saveStatus').textContent = t; }
+
+// Every edit: keep a working copy in the browser right away, and (once the case has a file in
+// the chosen folder) write that file too, a little later so typing doesn't cause constant writes.
 function changed() {
+  dirty = true;
   clearTimeout(saveTimer);
-  $('#saveStatus').textContent = 'กำลังบันทึก…';
   saveTimer = setTimeout(async () => {
-    try {
-      await idbSet('current', JSON.stringify(state));
-      $('#saveStatus').textContent = 'บันทึกอัตโนมัติแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      $('#saveStatus').textContent = 'บันทึกอัตโนมัติไม่ได้ — กรุณากด "บันทึกไฟล์"';
-    }
-  }, 500);
+    try { await idbSet('current', JSON.stringify(state)); }
+    catch { setStatus('บันทึกสำรองในเบราว์เซอร์ไม่ได้ — กรุณากด "บันทึก"'); }
+  }, 400);
+  if (state.fileName && folder.perm === 'granted') {
+    folderWritePending = true; setStatus('กำลังบันทึก…');
+    clearTimeout(folderTimer);
+    folderTimer = setTimeout(() => saveCase({ auto: true }), 1500);
+  } else {
+    setStatus(folder.handle ? 'ยังไม่ได้บันทึกลงโฟลเดอร์ — กด "บันทึก"' : 'ยังไม่ได้บันทึกเป็นไฟล์');
+  }
 }
 
 function caseFileName() {
   const p = state.patient;
   const parts = [p.cn, p.name, p.lastname, p.date].filter(Boolean).join('_') || 'posture';
-  return parts.replace(/[\\/:*?"<>|\s]+/g, '-') + '.json';
+  return parts.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 120) + '.json';
 }
-function saveFile() {
+// Fallback for file systems that refuse non-ASCII names: CN + date + short id.
+function asciiFileName() {
+  const p = state.patient;
+  const base = [p.cn, p.date].filter(Boolean).join('_').replace(/[^A-Za-z0-9._-]+/g, '-') || 'posture';
+  return `${base}_${state.id.slice(0, 6)}.json`;
+}
+function caseHasContent() {
+  const p = state.patient;
+  return !!(p.name || p.lastname || p.cn || Object.keys(state.photos).length || state.impression || state.muscle.strokes.length);
+}
+function downloadCase() {
   const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = caseFileName();
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  dirty = false; setStatus('ดาวน์โหลดไฟล์แล้ว ' + hhmm());
 }
-async function openFile(file) {
+
+function parseCase(text) {
+  const data = JSON.parse(text);
+  if (!data || typeof data !== 'object' || !data.patient) throw new Error('not a case file');
+  const s = Object.assign(emptyCase(), data);
+  s.id ??= newId();
+  return s;
+}
+async function loadCase(text, fileName) {
+  let s;
+  try { s = parseCase(text); } catch { toast('เปิดไฟล์ไม่ได้ — ไฟล์ไม่ใช่ไฟล์เคสของระบบนี้'); return false; }
+  s.fileName = fileName || null;
+  await applyState(s);
+  dirty = false;
+  try { await idbSet('current', JSON.stringify(state)); } catch { /* best effort */ }
+  setStatus(fileName ? 'เปิดจากโฟลเดอร์: ' + fileName : 'เปิดไฟล์แล้ว (ยังไม่อยู่ในโฟลเดอร์ — กด "บันทึก" เพื่อเก็บลงโฟลเดอร์)');
+  return true;
+}
+
+// Before replacing the current case: flush it to its file, or confirm discarding an unsaved one.
+async function leaveCurrentCase() {
+  if (state.fileName && folder.perm === 'granted') { if (dirty || folderWritePending) await saveCase({ auto: true }); return true; }
+  if (dirty && caseHasContent()) return confirm('เคสปัจจุบันยังไม่ได้บันทึกเป็นไฟล์ ต้องการทิ้งข้อมูลเคสนี้หรือไม่?');
+  return true;
+}
+
+// ------------------------------------------------------------------ case folder (File System Access API)
+// Chrome/Edge on a computer can read and write a folder the user picks. Other browsers fall back
+// to downloading/opening .json files by hand.
+
+const FS_OK = 'showDirectoryPicker' in window;
+const folder = { handle: null, perm: 'none' };
+
+async function loadFolder() {
+  if (!FS_OK) return;
   try {
-    const data = JSON.parse(await file.text());
-    if (!data || typeof data !== 'object' || !data.patient) throw new Error('bad file');
-    await applyState(Object.assign(emptyCase(), data));
-    changed();
-    toast('เปิดไฟล์แล้ว');
+    folder.handle = (await idbGet('folder')) || null;
+    if (folder.handle) folder.perm = await folder.handle.queryPermission({ mode: 'readwrite' });
+  } catch { folder.handle = null; }
+}
+async function chooseFolder() {
+  if (!FS_OK) { toast('เลือกโฟลเดอร์ได้เฉพาะ Chrome หรือ Edge บนคอมพิวเตอร์'); return false; }
+  try {
+    const h = await window.showDirectoryPicker({ id: 'posture-cases', mode: 'readwrite', startIn: 'documents' });
+    folder.handle = h; folder.perm = 'granted';
+    await idbSet('folder', h);
+    renderFolder(); toast('ตั้งที่เก็บไฟล์เป็นโฟลเดอร์ "' + h.name + '" แล้ว');
+    return true;
   } catch (e) {
-    toast('เปิดไฟล์ไม่ได้ — ไฟล์ไม่ใช่ไฟล์เคสของระบบนี้');
+    if (e.name !== 'AbortError') toast('เลือกโฟลเดอร์ไม่ได้: ' + e.message);
+    return false;
   }
+}
+// Must run from a click: browsers only show the permission prompt in response to the user.
+async function ensurePermission() {
+  if (!folder.handle) return false;
+  if (folder.perm === 'granted') return true;
+  try { folder.perm = await folder.handle.requestPermission({ mode: 'readwrite' }); } catch { folder.perm = 'denied'; }
+  renderFolder();
+  return folder.perm === 'granted';
+}
+async function fileExists(name) {
+  try { await folder.handle.getFileHandle(name); return true; } catch { return false; }
+}
+async function uniqueName(want, mine) {
+  if (want === mine || !(await fileExists(want))) return want;
+  const base = want.replace(/\.json$/, '');
+  for (let i = 2; ; i++) { const n = `${base}-${i}.json`; if (n === mine || !(await fileExists(n))) return n; }
+}
+async function writeFile(name, text) {
+  const fh = await folder.handle.getFileHandle(name, { create: true });
+  const w = await fh.createWritable(); // written to a temporary file and swapped in on close
+  await w.write(text); await w.close();
+}
+
+async function saveCase({ auto = false } = {}) {
+  clearTimeout(folderTimer);
+  if (!FS_OK || !folder.handle) {
+    folderWritePending = false;
+    if (auto) return;
+    if (FS_OK && confirm('ยังไม่ได้ตั้งโฟลเดอร์เก็บไฟล์\nตั้งตอนนี้เลยไหม? (กด Cancel เพื่อดาวน์โหลดเป็นไฟล์แทน)')) {
+      if (await chooseFolder()) return saveCase();
+    }
+    downloadCase(); return;
+  }
+  if (auto ? folder.perm !== 'granted' : !(await ensurePermission())) {
+    folderWritePending = false;
+    if (!auto) toast('ไม่ได้รับอนุญาตให้บันทึกลงโฟลเดอร์');
+    renderFolder(); return;
+  }
+  try {
+    const old = state.fileName;
+    // a manual save renames the file when CN/name/date changed; autosave keeps the current name
+    let name = old && auto ? old : await uniqueName(caseFileName(), old);
+    state.fileName = name; state.savedAt = new Date().toISOString();
+    try { await writeFile(name, JSON.stringify(state)); }
+    catch (e) {
+      if (name === old || !/[^\x00-\x7f]/.test(name)) throw e;
+      name = await uniqueName(asciiFileName(), old); state.fileName = name;
+      await writeFile(name, JSON.stringify(state));
+    }
+    if (old && old !== name) { try { await folder.handle.removeEntry(old); } catch { /* already gone */ } }
+    dirty = false; folderWritePending = false;
+    try { await idbSet('current', JSON.stringify(state)); } catch { /* best effort */ }
+    setStatus('บันทึกลงโฟลเดอร์แล้ว ' + hhmm());
+    if (!auto) toast('บันทึกแล้ว: ' + folder.handle.name + ' / ' + name);
+  } catch (e) {
+    folderWritePending = false;
+    setStatus('บันทึกลงโฟลเดอร์ไม่สำเร็จ');
+    toast('บันทึกไม่สำเร็จ: ' + e.message, 5000);
+  }
+}
+
+function renderFolder() {
+  const chip = $('#btnFolder');
+  chip.className = 'folder-chip';
+  if (!FS_OK) { chip.textContent = '📄 บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
+  if (!folder.handle) { chip.textContent = '📁 ยังไม่ได้ตั้งที่เก็บไฟล์'; chip.classList.add('warn'); chip.title = 'คลิกเพื่อเลือกโฟลเดอร์เก็บไฟล์เคส'; return; }
+  if (folder.perm !== 'granted') { chip.textContent = '📁 คลิกเพื่ออนุญาต: ' + folder.handle.name; chip.classList.add('warn'); chip.title = 'เบราว์เซอร์ต้องขออนุญาตเข้าโฟลเดอร์ทุกครั้งที่เปิดใหม่'; return; }
+  chip.textContent = '📁 ' + folder.handle.name; chip.classList.add('ok'); chip.title = 'โฟลเดอร์เก็บไฟล์เคส — คลิกเพื่อดูรายการเคส';
+}
+async function onFolderChip() {
+  if (!FS_OK) return openSettings();
+  if (!folder.handle) return chooseFolder();
+  if (folder.perm !== 'granted') { if (await ensurePermission()) toast('อนุญาตโฟลเดอร์แล้ว'); return; }
+  openCases();
+}
+
+// ---- case list
+let caseItems = [];
+async function openCases() {
+  const dlg = $('#casesDlg'); if (!dlg.open) dlg.showModal();
+  const body = $('#casesBody');
+  if (!FS_OK) {
+    body.innerHTML = '<div class="cases-msg">เบราว์เซอร์นี้เปิดรายการเคสจากโฟลเดอร์ไม่ได้ (ใช้ได้ใน Chrome หรือ Edge บนคอมพิวเตอร์)<br>กด "เปิดจากไฟล์อื่น…" เพื่อเลือกไฟล์ .json ของเคส</div>';
+    return;
+  }
+  if (!folder.handle) {
+    body.innerHTML = '<div class="cases-empty">ยังไม่ได้ตั้งโฟลเดอร์เก็บไฟล์เคส<br><button type="button" class="primary" id="casesPick">เลือกโฟลเดอร์</button></div>';
+    $('#casesPick').onclick = async () => { if (await chooseFolder()) openCases(); };
+    return;
+  }
+  if (folder.perm !== 'granted') {
+    body.innerHTML = `<div class="cases-empty">ต้องอนุญาตให้เข้าโฟลเดอร์ "${esc(folder.handle.name)}" ก่อน<br><button type="button" class="primary" id="casesAllow">อนุญาต</button></div>`;
+    $('#casesAllow').onclick = async () => { if (await ensurePermission()) openCases(); };
+    return;
+  }
+  body.innerHTML = '<div class="cases-empty">กำลังอ่านรายการเคส…</div>';
+  caseItems = [];
+  try {
+    for await (const [name, h] of folder.handle.entries()) {
+      if (h.kind !== 'file' || !name.toLowerCase().endsWith('.json')) continue;
+      const f = await h.getFile();
+      caseItems.push({ name, h, time: f.lastModified });
+    }
+  } catch (e) { body.innerHTML = `<div class="cases-empty">อ่านโฟลเดอร์ไม่ได้: ${esc(e.message)}</div>`; return; }
+  caseItems.sort((a, b) => b.time - a.time);
+  body.innerHTML = `<input type="search" class="cases-search" id="casesSearch" placeholder="ค้นหา CN หรือชื่อ (${caseItems.length} เคส ใน ${esc(folder.handle.name)})"><div class="cases-list" id="casesList"></div>`;
+  $('#casesSearch').oninput = renderCaseList;
+  renderCaseList(); $('#casesSearch').focus();
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function renderCaseList() {
+  const q = ($('#casesSearch')?.value || '').trim().toLowerCase();
+  const list = $('#casesList');
+  const items = caseItems.filter(it => !q || it.name.toLowerCase().includes(q));
+  if (!items.length) { list.innerHTML = `<div class="cases-empty">${caseItems.length ? 'ไม่พบเคสที่ค้นหา' : 'ยังไม่มีเคสในโฟลเดอร์นี้'}</div>`; return; }
+  list.innerHTML = '';
+  items.slice(0, 500).forEach(it => {
+    const parts = it.name.replace(/\.json$/i, '').split('_');
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'case-item' + (it.name === state.fileName ? ' current' : '');
+    b.innerHTML = `<span class="c-main">${esc(parts.slice(0, 3).join('  '))}</span>
+      <span class="c-time">${new Date(it.time).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+      <span class="c-sub">${esc(parts.slice(3).join(' ') || it.name)}</span>`;
+    b.onclick = async () => {
+      if (it.name === state.fileName) { $('#casesDlg').close(); return; }
+      if (!(await leaveCurrentCase())) return;
+      if (await loadCase(await (await it.h.getFile()).text(), it.name)) $('#casesDlg').close();
+    };
+    list.append(b);
+  });
+}
+async function openFromFile() {
+  if (!(await leaveCurrentCase())) return;
+  if (!window.showOpenFilePicker) { $('#fileOpen').value = ''; $('#fileOpen').click(); return; }
+  let fh;
+  try { [fh] = await window.showOpenFilePicker({ id: 'posture-cases', types: [{ description: 'ไฟล์เคส Posture', accept: { 'application/json': ['.json'] } }] }); }
+  catch { return; }
+  // a file that sits directly in the case folder keeps saving to itself
+  let inFolder = null;
+  if (folder.handle && folder.perm === 'granted') { try { const p = await folder.handle.resolve(fh); if (p && p.length === 1) inFolder = p[0]; } catch { /* other location */ } }
+  if (await loadCase(await (await fh.getFile()).text(), inFolder)) $('#casesDlg').close();
 }
 
 // ------------------------------------------------------------------ form bindings
@@ -901,7 +1109,7 @@ function bindMuscle() {
 // ------------------------------------------------------------------ clinic settings (logo, default chart)
 // Kept in the browser only, separate from the case, so they never end up in the repository.
 
-let settings = { logo: null, chart: null };
+let settings = { logo: null, chart: null, therapist: '' };
 async function saveSettings(patch) {
   Object.assign(settings, patch);
   try { await idbSet('settings', JSON.stringify(settings)); } catch { toast('บันทึกการตั้งค่าไม่ได้'); }
@@ -911,10 +1119,7 @@ function renderLogo() {
     slot.innerHTML = '';
     if (settings.logo) {
       const img = document.createElement('img'); img.src = settings.logo; img.alt = 'โลโก้'; img.title = 'คลิกเพื่อเปลี่ยนหรือลบโลโก้';
-      img.onclick = () => {
-        if (confirm('เปลี่ยนโลโก้? (กด Cancel เพื่อเลือกลบโลโก้แทน)')) pickLogo();
-        else if (confirm('ลบโลโก้ออก?')) { saveSettings({ logo: null }); renderLogo(); }
-      };
+      img.title = 'คลิกเพื่อเปลี่ยนโลโก้ (ตั้งค่า)'; img.onclick = openSettings;
       slot.append(img);
     } else {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'logo-add'; b.textContent = '+ ใส่โลโก้คลินิก';
@@ -928,9 +1133,66 @@ function pickLogo() {
     const f = input.files[0]; if (!f) return;
     // PNG keeps transparent logos transparent
     const src = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
-    await saveSettings({ logo: src }); renderLogo();
+    await saveSettings({ logo: src }); renderLogo(); renderSettings();
   };
   input.click();
+}
+
+function openSettings() { renderSettings(); const d = $('#settingsDlg'); if (!d.open) d.showModal(); }
+function renderSettings() {
+  $('#setFolderInfo').textContent = !FS_OK ? 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ (ใช้ Chrome หรือ Edge) — ไฟล์เคสจะดาวน์โหลดไปที่โฟลเดอร์ Downloads'
+    : folder.handle ? `โฟลเดอร์ "${folder.handle.name}"${folder.perm === 'granted' ? '' : ' (ต้องกดอนุญาตอีกครั้ง)'} · เคสบันทึกอัตโนมัติลงโฟลเดอร์นี้`
+    : 'ยังไม่ได้เลือก — เลือกโฟลเดอร์ในเครื่อง (เช่น Documents/Posture Cases) เพื่อเก็บไฟล์เคสทั้งหมด';
+  $('#setFolder').textContent = folder.handle ? 'เปลี่ยนโฟลเดอร์' : 'เลือกโฟลเดอร์';
+  $('#setFolder').disabled = !FS_OK;
+  $('#setLogoPreview').src = settings.logo || '';
+  $('#setLogoRemove').disabled = !settings.logo;
+  $('#setTherapist').value = settings.therapist || '';
+  $('#appVersion').textContent = APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION;
+  $('#offlineState').textContent = navigator.serviceWorker?.controller ? 'พร้อมใช้งานออฟไลน์ ✓' : 'ยังไม่พร้อมใช้ออฟไลน์ (ต้องเปิดผ่านเว็บอย่างน้อย 1 ครั้ง)';
+}
+function bindSettings() {
+  $$('[data-close]').forEach(b => b.onclick = () => b.closest('dialog').close());
+  $('#setFolder').onclick = async () => { if (await chooseFolder()) renderSettings(); };
+  $('#setLogo').onclick = pickLogo;
+  $('#setLogoRemove').onclick = async () => { await saveSettings({ logo: null }); renderLogo(); renderSettings(); };
+  $('#setChart').onclick = () => { $('#muscleFile').value = ''; $('#muscleFile').click(); };
+  $('#setTherapist').onchange = e => saveSettings({ therapist: e.target.value.trim() });
+  $('#btnSettings').onclick = openSettings;
+  $('#btnFolder').onclick = onFolderChip;
+  $('#casesFromFile').onclick = openFromFile;
+}
+
+// ------------------------------------------------------------------ offline app (service worker) & install
+
+function setupPWA() {
+  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  // Reload only when the user accepted an update; the very first install also fires
+  // controllerchange (clients.claim) and must not reload a page someone is working in.
+  let updateAccepted = false, reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updateAccepted && !reloading) { reloading = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const offer = w => {
+      $('#updateBar').hidden = false;
+      $('#btnUpdate').onclick = async () => {
+        if (state.fileName && (dirty || folderWritePending)) await saveCase({ auto: true });
+        updateAccepted = true; w.postMessage('skipWaiting');
+      };
+    };
+    if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); });
+    });
+    setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+  }).catch(() => { /* offline support unavailable; the app still works online */ });
+
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('#btnInstall').hidden = false; });
+  $('#btnInstall').onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; $('#btnInstall').hidden = true; };
+  window.addEventListener('appinstalled', () => { $('#btnInstall').hidden = true; toast('ติดตั้งแอปแล้ว เปิดได้จากเดสก์ท็อปหรือเมนู Start'); });
 }
 
 // ------------------------------------------------------------------ app
@@ -949,28 +1211,42 @@ async function applyState(s) {
 function redrawAll() { Object.keys(SLOTS).forEach(drawSlot); drawMuscle(); }
 
 async function init() {
-  bindFields(); bindSlots(); buildEditorUI(); bindMuscle();
+  window.addEventListener('error', e => toast('เกิดข้อผิดพลาด: ' + (e.message || e.error), 5000));
+  window.addEventListener('unhandledrejection', e => toast('เกิดข้อผิดพลาด: ' + (e.reason?.message || e.reason), 5000));
+  bindFields(); bindSlots(); buildEditorUI(); bindMuscle(); bindSettings(); setupPWA();
 
   $('#btnNew').onclick = async () => {
-    if (!confirm('เริ่มเคสใหม่? ข้อมูลที่ยังไม่ได้ "บันทึกไฟล์" จะหายไป')) return;
-    await applyState(emptyCase()); changed();
+    if (!(await leaveCurrentCase())) return;
+    const s = emptyCase(); s.patient.therapist = settings.therapist || '';
+    await applyState(s); dirty = false;
+    try { await idbSet('current', JSON.stringify(state)); } catch { /* best effort */ }
+    setStatus('เคสใหม่');
   };
-  $('#btnSave').onclick = saveFile;
-  $('#btnOpen').onclick = () => { $('#fileOpen').value = ''; $('#fileOpen').click(); };
-  $('#fileOpen').onchange = e => { const f = e.target.files[0]; if (f) openFile(f); };
+  $('#btnSave').onclick = () => saveCase();
+  $('#btnOpen').onclick = openCases;
+  $('#fileOpen').onchange = async e => { const f = e.target.files[0]; if (f && await loadCase(await f.text(), null)) $('#casesDlg').close(); };
   $('#btnPrint').onclick = () => window.print();
   document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); saveCase(); }
+    if (k === 'o') { e.preventDefault(); openCases(); }
   });
+  // don't close the tab while a write to the case folder is still waiting
+  window.addEventListener('beforeunload', e => { if (folderWritePending) { e.preventDefault(); e.returnValue = ''; } });
+  // ask the browser not to evict the working copy when the disk gets full
+  navigator.storage?.persist?.().catch(() => {});
 
   try { const st = await idbGet('settings'); if (st) Object.assign(settings, JSON.parse(st)); } catch { /* no settings yet */ }
   renderLogo();
+  await loadFolder(); renderFolder();
 
   let saved = null;
   try { saved = await idbGet('current'); } catch { /* storage unavailable: start blank */ }
   let s = emptyCase();
   if (saved) { try { s = Object.assign(emptyCase(), JSON.parse(saved)); } catch { /* ignore corrupt autosave */ } }
   await applyState(s);
+  setStatus(state.fileName ? 'ไฟล์: ' + state.fileName : '');
   if (document.fonts) document.fonts.ready.then(() => { redrawAll(); fitAll(); });
 
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(redrawAll, 150); });

@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Posture Analysis</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=dev">
+<meta name="theme-color" content="#1a9c8f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/fonts.css?v=__APP_VERSION__">
+<link rel="stylesheet" href="css/style.css?v=__APP_VERSION__">
 </head>
 <body>
 
@@ -16,12 +18,17 @@
   <div class="appbar-title">Posture Analysis</div>
   <div class="appbar-actions">
     <button id="btnNew" type="button">เคสใหม่</button>
-    <button id="btnOpen" type="button">เปิดไฟล์</button>
-    <button id="btnSave" type="button">บันทึกไฟล์</button>
-    <button id="btnPrint" type="button" class="primary">พิมพ์ / PDF</button>
+    <button id="btnOpen" type="button" title="Ctrl+O">เปิดเคส</button>
+    <button id="btnSave" type="button" title="Ctrl+S">บันทึก</button>
+    <button id="btnPrint" type="button" class="primary" title="Ctrl+P">พิมพ์ / PDF</button>
     <input id="fileOpen" type="file" accept=".json,application/json" hidden>
   </div>
-  <div id="saveStatus" class="appbar-status"></div>
+  <div class="appbar-status">
+    <button id="btnFolder" type="button" class="folder-chip" title="ที่เก็บไฟล์เคส"></button>
+    <span id="saveStatus"></span>
+  </div>
+  <button id="btnInstall" type="button" hidden>ติดตั้งแอป</button>
+  <button id="btnSettings" type="button" title="ตั้งค่า">ตั้งค่า</button>
 </header>
 
 <main class="pages">
@@ -174,9 +181,48 @@
   <div class="ed-stage" id="edStage"><canvas id="edCanvas"></canvas></div>
 </div>
 
+<!-- ============ Case list ============ -->
+<dialog id="casesDlg" class="dlg no-print">
+  <div class="dlg-head"><b>เปิดเคส</b><button type="button" class="dlg-x" data-close>✕</button></div>
+  <div id="casesBody"></div>
+  <div class="dlg-foot">
+    <button type="button" id="casesFromFile">เปิดจากไฟล์อื่น…</button>
+  </div>
+</dialog>
+
+<!-- ============ Settings ============ -->
+<dialog id="settingsDlg" class="dlg no-print">
+  <div class="dlg-head"><b>ตั้งค่า</b><button type="button" class="dlg-x" data-close>✕</button></div>
+  <section class="set-row">
+    <div><b>ที่เก็บไฟล์เคส</b><div class="set-sub" id="setFolderInfo"></div></div>
+    <button type="button" id="setFolder">เลือกโฟลเดอร์</button>
+  </section>
+  <section class="set-row">
+    <div><b>โลโก้คลินิก</b><div class="set-sub">แสดงที่หัวกระดาษทุกหน้า</div></div>
+    <div class="set-btns"><img id="setLogoPreview" alt=""><button type="button" id="setLogo">เปลี่ยน</button><button type="button" id="setLogoRemove">ลบ</button></div>
+  </section>
+  <section class="set-row">
+    <div><b>ภาพ Muscle chart</b><div class="set-sub">ใช้กับเคสใหม่ทุกเคส</div></div>
+    <div class="set-btns"><button type="button" id="setChart">เปลี่ยน</button></div>
+  </section>
+  <section class="set-row">
+    <div><b>นักกายภาพบำบัด (ค่าเริ่มต้น)</b><div class="set-sub">กรอกให้อัตโนมัติเมื่อเริ่มเคสใหม่</div></div>
+    <input id="setTherapist" class="set-input" placeholder="ชื่อนักกายภาพ">
+  </section>
+  <section class="set-about">
+    <div>Posture Analysis · เวอร์ชัน <span id="appVersion"></span> · <span id="offlineState"></span></div>
+    <div class="set-sub">ข้อมูลผู้รับบริการเก็บอยู่ในเครื่องนี้เท่านั้น ไม่ถูกส่งออกไปที่ใด
+      ระบบนี้เป็นเครื่องมือช่วยบันทึกและจัดทำรายงาน ไม่ใช่เครื่องมือวินิจฉัย ค่าที่วัดได้ขึ้นกับตำแหน่งที่ผู้ใช้วางจุด</div>
+  </section>
+</dialog>
+
+<div id="updateBar" class="update-bar no-print" hidden>
+  มีเวอร์ชันใหม่ <button type="button" id="btnUpdate" class="primary">อัปเดตเลย</button>
+</div>
+
 <input id="photoFile" type="file" accept="image/*" hidden>
 <div id="toast" class="toast no-print" hidden></div>
 
-<script src="js/app.js?v=dev"></script>
+<script src="js/app.js?v=__APP_VERSION__"></script>
 </body>
 </html>
