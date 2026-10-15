@@ -19,9 +19,9 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
   // The real folder picker is a native dialog; stand in a folder from the origin-private file system.
   await ctx.addInitScript(() => {
-    window.showDirectoryPicker = async () => {
+    window.showDirectoryPicker = async (o = {}) => {
       const root = await navigator.storage.getDirectory();
-      return root.getDirectoryHandle('Posture Cases', { create: true });
+      return root.getDirectoryHandle(o.id === 'posture-backup' ? 'Backup' : 'Posture Cases', { create: true });
     };
   });
   const page = await ctx.newPage();
@@ -81,6 +81,42 @@ try {
   check(saved[name].impression.startsWith('ข้อความยาว'), 'edits autosave to the same file');
   const fontPt = await page.locator('[data-bind-text="impression"]').evaluate(e => parseFloat(e.style.fontSize));
   check(fontPt < 11, `long impression text shrinks its font (${fontPt}pt) instead of the chart`);
+
+  // backup: a second folder gets a copy of every save; a full backup is a ZIP that restores
+  check(await page.locator('#btnBackup').isVisible(), 'reminder shows when no backup has been made yet');
+  await page.click('#btnSettings');
+  await page.click('#setBackupFolder');
+  await page.waitForFunction(() => document.querySelector('#setBackupInfo').textContent.includes('Backup'));
+  await page.click('#settingsDlg [data-close]');
+  await page.click('#btnSave');
+  await page.waitForFunction(async n => {
+    try { return !!(await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('Backup')).getDirectoryHandle('cases')).getFileHandle(n)); }
+    catch { return false; }
+  }, name, { timeout: 8000 }).catch(() => {});
+  const listDir = async path => page.evaluate(async path => {
+    let d = await navigator.storage.getDirectory();
+    for (const p of path) d = await d.getDirectoryHandle(p);
+    const out = []; for await (const [n] of d.entries()) out.push(n); return out.sort();
+  }, path);
+  check((await listDir(['Backup', 'cases'])).includes(name), 'each save is copied to the backup folder');
+  await page.click('#btnSettings'); await page.click('#setBackupNow');
+  await page.waitForFunction(() => document.querySelector('#saveStatus').textContent.includes('สำรองข้อมูลแล้ว'));
+  await page.click('#settingsDlg [data-close]');
+  check(await page.locator('#btnBackup').isHidden(), 'reminder clears after a full backup');
+  const zips = (await listDir(['Backup'])).filter(n => n.endsWith('.zip'));
+  check(zips.length === 1, `full backup writes a dated ZIP (${zips[0]})`);
+  const zipBytes = await page.evaluate(async n => {
+    const f = await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('Backup')).getFileHandle(n)).getFile();
+    return Array.from(new Uint8Array(await f.arrayBuffer()));
+  }, zips[0]);
+  await page.evaluate(async n => (await (await navigator.storage.getDirectory()).getDirectoryHandle('Posture Cases')).removeEntry(n), name);
+  check(!(await listDir(['Posture Cases'])).includes(name), 'case file deleted (simulated loss)');
+  await page.click('#btnSettings');
+  const [rc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#setRestore')]);
+  await rc.setFiles({ name: zips[0], mimeType: 'application/zip', buffer: Buffer.from(zipBytes) });
+  await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('กู้คืนแล้ว'));
+  await page.click('#settingsDlg [data-close]');
+  check((await listDir(['Posture Cases'])).includes(name), 'restore brings the case back from the ZIP');
 
   await page.click('#btnNew');
   check(await page.inputValue('[data-bind="patient.name"] >> nth=0') === '', 'new case starts empty');

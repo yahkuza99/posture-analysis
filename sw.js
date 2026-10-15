@@ -11,6 +11,7 @@ const FILES = [
   'css/style.css',
   'css/fonts.css',
   'js/protocol.js',
+  'js/zip.js',
   'js/app.js',
   'manifest.webmanifest',
   'icons/icon-192.png',

@@ -336,3 +336,7 @@ details.ed-group summary { cursor: pointer; margin-bottom: 6px; }
   input::placeholder { color: transparent; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Backup ---------- */
+.backup-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; border-color: #e0a100; background: #fff8e1; color: #7a5600; }
+.set-col { flex-direction: column; align-items: stretch; min-width: 170px; }

@@ -27,6 +27,7 @@
     <button id="btnFolder" type="button" class="folder-chip" title="ที่เก็บไฟล์เคส"></button>
     <span id="saveStatus"></span>
   </div>
+  <button id="btnBackup" type="button" class="backup-chip" hidden></button>
   <button id="btnInstall" type="button" hidden>ติดตั้งแอป</button>
   <button id="btnSettings" type="button" title="ตั้งค่า">ตั้งค่า</button>
 </header>
@@ -224,6 +225,14 @@
     <div><b>นักกายภาพบำบัด (ค่าเริ่มต้น)</b><div class="set-sub">กรอกให้อัตโนมัติเมื่อเริ่มเคสใหม่</div></div>
     <input id="setTherapist" class="set-input" placeholder="ชื่อนักกายภาพ">
   </section>
+  <section class="set-row set-backup">
+    <div><b>สำรองข้อมูล</b><div class="set-sub" id="setBackupInfo"></div></div>
+    <div class="set-btns set-col">
+      <button type="button" id="setBackupFolder">เลือกโฟลเดอร์สำรอง</button>
+      <button type="button" id="setBackupNow" class="primary">สำรองทั้งหมดตอนนี้</button>
+      <button type="button" id="setRestore">กู้คืนจากไฟล์สำรอง…</button>
+    </div>
+  </section>
   <section class="set-about">
     <div>Posture Analysis · เวอร์ชัน <span id="appVersion"></span> · <span id="offlineState"></span></div>
     <div class="set-sub">ข้อมูลผู้รับบริการเก็บอยู่ในเครื่องนี้เท่านั้น ไม่ถูกส่งออกไปที่ใด
@@ -240,6 +249,7 @@
 <div id="toast" class="toast no-print" hidden></div>
 
 <script src="js/protocol.js?v=__APP_VERSION__"></script>
+<script src="js/zip.js?v=__APP_VERSION__"></script>
 <script src="js/app.js?v=__APP_VERSION__"></script>
 </body>
 </html>

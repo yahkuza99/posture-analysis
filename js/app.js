@@ -305,6 +305,7 @@ async function saveCase({ auto = false } = {}) {
       await writeFile(name, JSON.stringify(state));
     }
     if (old && old !== name) { try { await folder.handle.removeEntry(old); } catch { /* already gone */ } }
+    await mirrorToBackup(name, JSON.stringify(state), old !== name ? old : null);
     dirty = false; folderWritePending = false;
     try { await idbSet('current', JSON.stringify(state)); } catch { /* best effort */ }
     setStatus('บันทึกลงโฟลเดอร์แล้ว ' + hhmm());
@@ -316,7 +317,151 @@ async function saveCase({ auto = false } = {}) {
   }
 }
 
+// ------------------------------------------------------------------ backup
+// 1) every save is copied to a second folder (external drive / NAS) under "cases/";
+// 2) "back up everything" writes one dated ZIP of all cases + clinic settings, kept 12 deep;
+// 3) restore reads such a ZIP back into the case folder.
+
+const { makeZip, readZip } = window.PostureZip;
+const backup = { handle: null, perm: 'none' };
+const BACKUP_KEEP = 12, BACKUP_REMIND_DAYS = 7;
+
+async function loadBackupFolder() {
+  if (!FS_OK) return;
+  try {
+    backup.handle = (await idbGet('backupFolder')) || null;
+    if (backup.handle) backup.perm = await backup.handle.queryPermission({ mode: 'readwrite' });
+  } catch { backup.handle = null; }
+}
+async function chooseBackupFolder() {
+  if (!FS_OK) { toast('เลือกโฟลเดอร์ได้เฉพาะ Chrome หรือ Edge บนคอมพิวเตอร์'); return false; }
+  try {
+    const h = await window.showDirectoryPicker({ id: 'posture-backup', mode: 'readwrite' });
+    if (folder.handle && (await h.isSameEntry(folder.handle) || await folder.handle.resolve(h) || await h.resolve(folder.handle))) {
+      toast('โฟลเดอร์สำรองต้องแยกจากโฟลเดอร์เก็บเคส — แนะนำฮาร์ดดิสก์ภายนอกหรือ NAS', 5000); return false;
+    }
+    backup.handle = h; backup.perm = 'granted';
+    await idbSet('backupFolder', h);
+    toast('ตั้งโฟลเดอร์สำรองเป็น "' + h.name + '" แล้ว');
+    renderBackup(); return true;
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('เลือกโฟลเดอร์ไม่ได้: ' + e.message);
+    return false;
+  }
+}
+async function ensureBackupPerm() {
+  if (!backup.handle) return false;
+  if (backup.perm === 'granted') return true;
+  try { backup.perm = await backup.handle.requestPermission({ mode: 'readwrite' }); } catch { backup.perm = 'denied'; }
+  renderBackup();
+  return backup.perm === 'granted';
+}
+async function writeTo(dir, name, data) {
+  const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+  await w.write(data); await w.close();
+}
+// Copy of the case just saved; silent and best effort — the main save already succeeded.
+async function mirrorToBackup(name, text, oldName) {
+  if (!backup.handle || backup.perm !== 'granted') return;
+  try {
+    const dir = await backup.handle.getDirectoryHandle('cases', { create: true });
+    await writeTo(dir, name, text);
+    if (oldName) { try { await dir.removeEntry(oldName); } catch { /* not mirrored before */ } }
+    backup.lastMirror = Date.now();
+  } catch { setStatus('บันทึกแล้ว แต่คัดลอกไปโฟลเดอร์สำรองไม่สำเร็จ'); }
+}
+
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+async function fullBackup() {
+  if (!FS_OK) { toast('ระบบสำรองต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'); return; }
+  if (!folder.handle) { toast('ตั้งโฟลเดอร์เก็บเคสก่อน แล้วจึงสำรองข้อมูล'); return; }
+  if (!(await ensurePermission())) { toast('ไม่ได้รับอนุญาตให้อ่านโฟลเดอร์เก็บเคส'); return; }
+  if (state.fileName && (dirty || folderWritePending)) await saveCase({ auto: true });
+  setStatus('กำลังสำรองข้อมูล…');
+  try {
+    const files = [];
+    for await (const [name, h] of folder.handle.entries()) {
+      if (h.kind !== 'file' || !name.toLowerCase().endsWith('.json')) continue;
+      const f = await h.getFile();
+      files.push({ name: 'cases/' + name, data: new Uint8Array(await f.arrayBuffer()), date: new Date(f.lastModified) });
+    }
+    const { logo, chart, therapist } = settings;
+    files.push({ name: 'settings.json', data: JSON.stringify({ logo, chart, therapist }) });
+    files.push({ name: 'README.txt', data: `Posture Analysis backup ${new Date().toLocaleString('th-TH')}\nเคส ${files.length - 1} ไฟล์ — กู้คืนได้จาก ตั้งค่า > กู้คืนจากไฟล์สำรอง\n` });
+    const zip = makeZip(files), zipName = `posture-backup_${stamp()}.zip`;
+    const toFolder = backup.handle && (await ensureBackupPerm());
+    if (toFolder) {
+      await writeTo(backup.handle, zipName, zip);
+      // keep the newest BACKUP_KEEP archives
+      const old = [];
+      for await (const [n, h] of backup.handle.entries()) if (h.kind === 'file' && /^posture-backup_.*\.zip$/.test(n)) old.push(n);
+      old.sort().reverse().slice(BACKUP_KEEP).forEach(n => backup.handle.removeEntry(n).catch(() => {}));
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip], { type: 'application/zip' })); a.download = zipName; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }
+    await saveSettings({ lastBackup: new Date().toISOString() });
+    renderBackup();
+    setStatus('สำรองข้อมูลแล้ว ' + hhmm());
+    toast(`สำรอง ${files.length - 2} เคสแล้ว: ${toFolder ? backup.handle.name + ' / ' : 'ดาวน์โหลด '}${zipName}`, 5000);
+  } catch (e) {
+    setStatus('สำรองข้อมูลไม่สำเร็จ'); toast('สำรองข้อมูลไม่สำเร็จ: ' + e.message, 6000);
+  }
+}
+
+async function restoreBackup(file) {
+  let entries;
+  try { entries = await readZip(new Uint8Array(await file.arrayBuffer())); }
+  catch (e) { toast('เปิดไฟล์สำรองไม่ได้: ' + e.message, 5000); return; }
+  const cases = entries.filter(e => /^cases\/[^/]+\.json$/i.test(e.name));
+  const setEntry = entries.find(e => e.name === 'settings.json');
+  if (!cases.length && !setEntry) { toast('ไฟล์นี้ไม่ใช่ไฟล์สำรองของระบบนี้'); return; }
+  let restored = 0;
+  if (cases.length) {
+    if (!FS_OK || !folder.handle) { toast('ตั้งโฟลเดอร์เก็บเคสก่อน แล้วจึงกู้คืน'); return; }
+    if (!(await ensurePermission())) return;
+    const exist = [];
+    for (const c of cases) if (await fileExists(c.name.slice(6))) exist.push(c);
+    let overwrite = false;
+    if (exist.length) overwrite = confirm(`ไฟล์สำรองมี ${cases.length} เคส และมี ${exist.length} เคสที่อยู่ในโฟลเดอร์แล้ว\nกด OK = เขียนทับด้วยข้อมูลจากไฟล์สำรอง\nกด Cancel = กู้คืนเฉพาะเคสที่ยังไม่มี`);
+    for (const c of cases) {
+      const name = c.name.slice(6);
+      if (!overwrite && exist.includes(c)) continue;
+      try { parseCase(new TextDecoder().decode(c.data)); } catch { continue; } // skip anything that is not a case
+      await writeFile(name, c.data); restored++;
+    }
+  }
+  if (setEntry && confirm('กู้คืนการตั้งค่าคลินิก (โลโก้ ภาพ Muscle chart ชื่อนักกายภาพ) จากไฟล์สำรองด้วยไหม?')) {
+    try { const s = JSON.parse(new TextDecoder().decode(setEntry.data)); await saveSettings({ logo: s.logo ?? settings.logo, chart: s.chart ?? settings.chart, therapist: s.therapist ?? settings.therapist }); renderLogo(); drawMuscle(); }
+    catch { toast('อ่านการตั้งค่าในไฟล์สำรองไม่ได้'); }
+  }
+  renderSettings();
+  toast(`กู้คืนแล้ว ${restored} เคส`, 4000);
+}
+function pickRestore() {
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.zip,application/zip';
+  input.onchange = () => { const f = input.files[0]; if (f) restoreBackup(f); };
+  input.click();
+}
+
+function backupAgeDays() { return settings.lastBackup ? (Date.now() - new Date(settings.lastBackup)) / 86400000 : Infinity; }
+function renderBackup() {
+  const chip = $('#btnBackup');
+  const due = FS_OK && folder.handle && backupAgeDays() >= BACKUP_REMIND_DAYS;
+  chip.hidden = !due;
+  chip.textContent = settings.lastBackup ? `⚠ สำรองข้อมูลล่าสุด ${Math.floor(backupAgeDays())} วันก่อน` : '⚠ ยังไม่เคยสำรองข้อมูล';
+  if (!$('#setBackupInfo')) return;
+  const last = settings.lastBackup ? new Date(settings.lastBackup).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ยังไม่เคย';
+  $('#setBackupInfo').textContent = !FS_OK ? 'ต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'
+    : (backup.handle
+      ? `โฟลเดอร์สำรอง "${backup.handle.name}"${backup.perm === 'granted' ? ' · คัดลอกทุกครั้งที่บันทึก' : ' (ต้องกดอนุญาตอีกครั้ง — กด "สำรองทั้งหมดตอนนี้")'}`
+      : 'ยังไม่ได้เลือกโฟลเดอร์สำรอง — แนะนำฮาร์ดดิสก์ภายนอกหรือ NAS') + ` · สำรองทั้งหมดล่าสุด: ${last}`;
+  $('#setBackupFolder').textContent = backup.handle ? 'เปลี่ยนโฟลเดอร์สำรอง' : 'เลือกโฟลเดอร์สำรอง';
+  $('#setBackupFolder').disabled = $('#setBackupNow').disabled = !FS_OK;
+}
+
 function renderFolder() {
+  if (backup) renderBackup(); // the reminder depends on whether a case folder is set
   const chip = $('#btnFolder');
   chip.className = 'folder-chip';
   if (!FS_OK) { chip.textContent = '📄 บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
@@ -1325,7 +1470,7 @@ function bindMuscle() {
 // ------------------------------------------------------------------ clinic settings (logo, default chart)
 // Kept in the browser only, separate from the case, so they never end up in the repository.
 
-let settings = { logo: null, chart: null, therapist: '' };
+let settings = { logo: null, chart: null, therapist: '', lastBackup: null };
 async function saveSettings(patch) {
   Object.assign(settings, patch);
   try { await idbSet('settings', JSON.stringify(settings)); } catch { toast('บันทึกการตั้งค่าไม่ได้'); }
@@ -1365,6 +1510,7 @@ function renderSettings() {
   $('#setLogoRemove').disabled = !settings.logo;
   $('#setTherapist').value = settings.therapist || '';
   $('#appVersion').textContent = APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION;
+  renderBackup();
   $('#offlineState').textContent = navigator.serviceWorker?.controller ? 'พร้อมใช้งานออฟไลน์ ✓' : 'ยังไม่พร้อมใช้ออฟไลน์ (ต้องเปิดผ่านเว็บอย่างน้อย 1 ครั้ง)';
 }
 function bindSettings() {
@@ -1377,6 +1523,10 @@ function bindSettings() {
   $('#btnSettings').onclick = openSettings;
   $('#btnFolder').onclick = onFolderChip;
   $('#casesFromFile').onclick = openFromFile;
+  $('#setBackupFolder').onclick = chooseBackupFolder;
+  $('#setBackupNow').onclick = fullBackup;
+  $('#setRestore').onclick = pickRestore;
+  $('#btnBackup').onclick = fullBackup;
 }
 
 // ------------------------------------------------------------------ offline app (service worker) & install
@@ -1457,6 +1607,7 @@ async function init() {
   try { const st = await idbGet('settings'); if (st) Object.assign(settings, JSON.parse(st)); } catch { /* no settings yet */ }
   renderLogo();
   await loadFolder(); renderFolder();
+  await loadBackupFolder(); renderBackup();
 
   let saved = null;
   try { saved = await idbGet('current'); } catch { /* storage unavailable: start blank */ }
