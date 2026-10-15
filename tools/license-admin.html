@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ออก License — Posture Analysis</title>
+<link rel="stylesheet" href="../css/fonts.css">
+<style>
+  :root { --teal: #1a9c8f; --ink: #1d1d1f; --muted: #6b6f76; --line: #e3e6e8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef0f1; color: var(--ink); font: 15px/1.6 "Sarabun", Tahoma, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font: 700 22px "Montserrat", "Sarabun", sans-serif; color: var(--teal); margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 22px; }
+  section { background: #fff; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  .step { display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: var(--teal); color: #fff; text-align: center; font-size: 13px; line-height: 24px; margin-right: 6px; }
+  p.note { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+  .warn { background: #fff8e1; border-left: 4px solid #e0a100; padding: 8px 12px; font-size: 13px; margin: 10px 0; }
+  button { font: inherit; padding: 7px 14px; border: 1px solid #b9bec4; border-radius: 6px; background: #fff; cursor: pointer; }
+  button.primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  label { display: block; font-weight: 600; margin: 10px 0 4px; }
+  input[type=text], input[type=date], textarea, select { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid #b9bec4; border-radius: 6px; background: #fff; }
+  textarea { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .status { font-size: 14px; margin-top: 8px; }
+  .ok { color: #137a6e; } .err { color: #c62828; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ออก License — Posture Analysis</h1>
+  <p class="lead">เครื่องมือสำหรับผู้ขาย ทำงานในเครื่องนี้ทั้งหมด ไม่ส่งข้อมูลออกอินเทอร์เน็ต</p>
+
+  <section>
+    <h2><span class="step">1</span>สร้างกุญแจ (ทำครั้งเดียว)</h2>
+    <p class="note">ได้ไฟล์ "กุญแจลับ" ไว้ออก license และข้อความ "กุญแจสาธารณะ" ไว้ฝังในโปรแกรม ถ้ามีไฟล์กุญแจลับอยู่แล้ว ข้ามไปข้อ 2</p>
+    <button type="button" id="genKeys">สร้างกุญแจใหม่</button>
+    <div id="genOut" class="hidden">
+      <div class="warn"><b>เก็บไฟล์ posture-license-PRIVATE-KEY.json ไว้ให้ดี</b>
+        สำรองไว้อย่างน้อย 2 ที่ (เช่น USB และไดรฟ์ส่วนตัว) อย่าส่งให้ใคร ใครมีไฟล์นี้ออก license ได้
+        ถ้าไฟล์หาย จะออก license ใหม่ให้โปรแกรมเวอร์ชันปัจจุบันไม่ได้อีก</div>
+      <label>กุญแจสาธารณะ — คัดลอกข้อความนี้ไปใส่ในโปรแกรม (ส่งให้ผู้พัฒนาได้ ไม่เป็นความลับ)</label>
+      <textarea id="pubOut" rows="4" readonly></textarea>
+      <div class="row"><button type="button" data-copy="pubOut">คัดลอก</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>เปิดไฟล์กุญแจลับ</h2>
+    <button type="button" id="loadKey">เปิดไฟล์ posture-license-PRIVATE-KEY.json…</button>
+    <div id="keyStatus" class="status"></div>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span>ออก License ให้ลูกค้า</h2>
+    <label for="clinic">ชื่อคลินิก / ลูกค้า (จะพิมพ์อยู่ท้ายรายงานทุกหน้า)</label>
+    <input type="text" id="clinic" placeholder="เช่น คลินิกกายภาพบำบัด สุขภาพดี">
+    <label for="plan">อายุการใช้งาน</label>
+    <select id="plan">
+      <option value="1y">1 ปี</option>
+      <option value="6m">6 เดือน</option>
+      <option value="1m">1 เดือน</option>
+      <option value="none">ไม่มีวันหมดอายุ (ซื้อขาด)</option>
+      <option value="custom">กำหนดวันหมดอายุเอง</option>
+    </select>
+    <div id="customWrap" class="hidden"><label for="expDate">ใช้ได้ถึงวันที่</label><input type="date" id="expDate"></div>
+    <label for="note">หมายเหตุ (เก็บในรายการของคุณเท่านั้น ไม่อยู่ใน license)</label>
+    <input type="text" id="note" placeholder="เช่น เบอร์โทร, เลขใบเสร็จ">
+    <div class="row"><button type="button" class="primary" id="issue" disabled>ออก License</button></div>
+    <div id="issueOut" class="hidden">
+      <label>License key — ส่งให้ลูกค้า (คัดลอกข้อความ หรือส่งไฟล์ .license)</label>
+      <textarea id="keyOut" rows="5" readonly></textarea>
+      <div class="row"><button type="button" data-copy="keyOut">คัดลอก</button><button type="button" id="dlLicense">ดาวน์โหลดไฟล์ .license</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>ตรวจสอบ License</h2>
+    <p class="note">วาง license key เพื่อตรวจว่าออกด้วยกุญแจที่เปิดอยู่ และดูรายละเอียด</p>
+    <textarea id="checkIn" rows="3" placeholder="PA1-…"></textarea>
+    <div class="row"><button type="button" id="check" disabled>ตรวจสอบ</button></div>
+    <div id="checkOut" class="status"></div>
+  </section>
+
+  <section>
+    <h2>License ที่ออกแล้ว (บันทึกในเบราว์เซอร์นี้)</h2>
+    <p class="note">ดาวน์โหลดเป็นไฟล์ CSV เก็บไว้เป็นทะเบียนลูกค้าเป็นระยะ</p>
+    <div id="logWrap"></div>
+    <div class="row"><button type="button" id="exportCsv">ดาวน์โหลด CSV</button></div>
+  </section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const ALG = { name: 'ECDSA', namedCurve: 'P-256' };
+const SIG = { name: 'ECDSA', hash: 'SHA-256' };
+let privateKey = null, publicJwk = null;
+
+const b64u = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uDecode = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const thDate = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('th-TH', { dateStyle: 'medium' }); };
+const pubOnly = j => ({ kty: j.kty, crv: j.crv, x: j.x, y: j.y });
+function download(name, text, type = 'application/json') {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const LOG_KEY = 'posture-license-log';
+const readLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } };
+const writeLog = l => { try { localStorage.setItem(LOG_KEY, JSON.stringify(l)); } catch { /* storage off: list is not kept */ } };
+
+document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+  const t = $('#' + b.dataset.copy); t.select();
+  try { await navigator.clipboard.writeText(t.value); } catch { document.execCommand('copy'); }
+  b.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => (b.textContent = 'คัดลอก'), 1500);
+});
+
+$('#genKeys').onclick = async () => {
+  if (privateKey && !confirm('มีกุญแจเปิดอยู่แล้ว สร้างชุดใหม่? license ที่ออกด้วยกุญแจเดิมจะใช้กับโปรแกรมที่ฝังกุญแจใหม่ไม่ได้')) return;
+  const kp = await crypto.subtle.generateKey(ALG, true, ['sign', 'verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  download('posture-license-PRIVATE-KEY.json', JSON.stringify({ purpose: 'Posture Analysis license signing key — KEEP SECRET', created: today(), jwk }, null, 2));
+  await useKey(jwk);
+  $('#pubOut').value = JSON.stringify(publicJwk);
+  $('#genOut').classList.remove('hidden');
+};
+
+$('#loadKey').onclick = () => {
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+  input.onchange = async () => {
+    try {
+      const data = JSON.parse(await input.files[0].text());
+      await useKey(data.jwk || data);
+    } catch { $('#keyStatus').innerHTML = '<span class="err">ไฟล์นี้ไม่ใช่กุญแจลับของระบบ</span>'; }
+  };
+  input.click();
+};
+
+async function useKey(jwk) {
+  if (!jwk.d) throw new Error('not a private key');
+  privateKey = await crypto.subtle.importKey('jwk', jwk, ALG, false, ['sign']);
+  publicJwk = pubOnly(jwk);
+  $('#pubOut').value = JSON.stringify(publicJwk);
+  $('#keyStatus').innerHTML = `<span class="ok">✓ เปิดกุญแจแล้ว</span> — รหัสกุญแจ ${publicJwk.x.slice(0, 8)}`;
+  $('#issue').disabled = false; $('#check').disabled = false;
+}
+
+$('#plan').onchange = () => $('#customWrap').classList.toggle('hidden', $('#plan').value !== 'custom');
+function expiry() {
+  const p = $('#plan').value; if (p === 'none') return null;
+  if (p === 'custom') return $('#expDate').value || '';
+  const d = new Date(); const n = { '1y': 12, '6m': 6, '1m': 1 }[p];
+  d.setMonth(d.getMonth() + n);
+  return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+let lastKey = '', lastClinic = '';
+$('#issue').onclick = async () => {
+  const clinic = $('#clinic').value.trim();
+  if (!clinic) { alert('กรุณากรอกชื่อคลินิก'); return; }
+  const exp = expiry();
+  if (exp === '') { alert('กรุณาเลือกวันหมดอายุ'); return; }
+  const id = 'L' + today().replace(/-/g, '').slice(2) + '-' + b64u(crypto.getRandomValues(new Uint8Array(3))).toUpperCase();
+  const payload = { v: 1, id, clinic, iss: today(), exp };
+  const body = b64u(new TextEncoder().encode(JSON.stringify(payload)));
+  const sig = await crypto.subtle.sign(SIG, privateKey, new TextEncoder().encode(body));
+  lastKey = `PA1-${body}.${b64u(sig)}`; lastClinic = clinic;
+  $('#keyOut').value = lastKey;
+  $('#issueOut').classList.remove('hidden');
+  const log = readLog(); log.unshift({ ...payload, note: $('#note').value.trim(), key: lastKey }); writeLog(log); renderLog();
+};
+$('#dlLicense').onclick = () => download(lastClinic.replace(/[\\/:*?"<>|]+/g, '-') + '.license', lastKey + '\n', 'text/plain');
+
+$('#check').onclick = async () => {
+  const out = $('#checkOut');
+  const m = /^PA1-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec($('#checkIn').value.replace(/\s+/g, ''));
+  if (!m) { out.innerHTML = '<span class="err">รูปแบบไม่ถูกต้อง</span>'; return; }
+  const pub = await crypto.subtle.importKey('jwk', publicJwk, ALG, false, ['verify']);
+  const good = await crypto.subtle.verify(SIG, pub, b64uDecode(m[2]), new TextEncoder().encode(m[1]));
+  if (!good) { out.innerHTML = '<span class="err">✗ ไม่ได้ออกด้วยกุญแจนี้ หรือถูกแก้ไข</span>'; return; }
+  const p = JSON.parse(new TextDecoder().decode(b64uDecode(m[1])));
+  const expired = p.exp && p.exp < today();
+  out.innerHTML = `<span class="${expired ? 'err' : 'ok'}">${expired ? '✗ หมดอายุแล้ว' : '✓ ใช้ได้'}</span> — ${esc(p.clinic)} · ออก ${thDate(p.iss)} · ${p.exp ? 'ถึง ' + thDate(p.exp) : 'ไม่มีวันหมดอายุ'} · ${esc(p.id)}`;
+};
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function renderLog() {
+  const log = readLog();
+  $('#logWrap').innerHTML = log.length ? `<table><tr><th>รหัส</th><th>คลินิก</th><th>ออกเมื่อ</th><th>หมดอายุ</th><th>หมายเหตุ</th></tr>${
+    log.map(l => `<tr><td>${esc(l.id)}</td><td>${esc(l.clinic)}</td><td>${thDate(l.iss)}</td><td>${l.exp ? thDate(l.exp) : 'ไม่มี'}</td><td>${esc(l.note || '')}</td></tr>`).join('')}</table>`
+    : '<p class="note">ยังไม่มี</p>';
+}
+$('#exportCsv').onclick = () => {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['id', 'clinic', 'issued', 'expires', 'note', 'key'], ...readLog().map(l => [l.id, l.clinic, l.iss, l.exp || '', l.note || '', l.key])];
+  download(`posture-licenses-${today()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n'), 'text/csv');
+};
+renderLog();
+if (!crypto.subtle) document.querySelector('main').insertAdjacentHTML('afterbegin', '<div class="warn">เบราว์เซอร์นี้ไม่รองรับการเข้ารหัส กรุณาเปิดด้วย Chrome หรือ Edge</div>');
+})();
+</script>
+</body>
+</html>

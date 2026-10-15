@@ -9,6 +9,10 @@
 
 const APP_VERSION = '__APP_VERSION__'; // stamped with the commit on deploy
 
+// Public half of the seller's license signing key (ECDSA P-256, JWK). Licenses are signed with the
+// private half in tools/license-admin.html and verified here, offline. null = every copy runs as a trial.
+const LICENSE_PUBLIC_KEY = null;
+
 const SLOTS = {
   front:     { label: 'ด้านหน้า (Anterior)',       view: 'front', row: 'row1' },
   back:      { label: 'ด้านหลัง (Posterior)',      view: 'back',  row: 'row1' },
@@ -1109,7 +1113,7 @@ function bindMuscle() {
 // ------------------------------------------------------------------ clinic settings (logo, default chart)
 // Kept in the browser only, separate from the case, so they never end up in the repository.
 
-let settings = { logo: null, chart: null, therapist: '' };
+let settings = { logo: null, chart: null, therapist: '', license: null };
 async function saveSettings(patch) {
   Object.assign(settings, patch);
   try { await idbSet('settings', JSON.stringify(settings)); } catch { toast('บันทึกการตั้งค่าไม่ได้'); }
@@ -1163,6 +1167,92 @@ function bindSettings() {
   $('#casesFromFile').onclick = openFromFile;
 }
 
+// ------------------------------------------------------------------ license (offline, signed)
+// Key format: "PA1-" + base64url(JSON payload) + "." + base64url(ECDSA P-256 / SHA-256 signature).
+// Payload: { v: 1, id, clinic, iss: 'YYYY-MM-DD', exp: 'YYYY-MM-DD' | null }.
+// Unlicensed or expired copies keep every feature but print with a "trial" watermark.
+
+let license = null; // verified payload, or null
+
+const b64uDecode = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+function publicKeyJwk() {
+  // tests run on localhost with their own key pair
+  if (window.__TEST_LICENSE_PUBLIC_KEY__ && ['localhost', '127.0.0.1'].includes(location.hostname)) return window.__TEST_LICENSE_PUBLIC_KEY__;
+  return LICENSE_PUBLIC_KEY;
+}
+async function verifyLicense(text) {
+  const key = String(text || '').replace(/\s+/g, '');
+  const m = /^PA1-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(key);
+  if (!m) return { ok: false, reason: 'รูปแบบ license ไม่ถูกต้อง' };
+  const jwk = publicKeyJwk();
+  if (!jwk || !crypto.subtle) return { ok: false, reason: 'โปรแกรมนี้ยังไม่ได้ตั้งค่าการตรวจ license' };
+  let payload;
+  try {
+    const pub = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    const good = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, b64uDecode(m[2]), new TextEncoder().encode(m[1]));
+    if (!good) return { ok: false, reason: 'license ไม่ถูกต้อง (ลายเซ็นไม่ตรง)' };
+    payload = JSON.parse(new TextDecoder().decode(b64uDecode(m[1])));
+  } catch { return { ok: false, reason: 'license ไม่ถูกต้อง' }; }
+  if (payload.v !== 1 || !payload.clinic) return { ok: false, reason: 'license ไม่ถูกต้อง' };
+  if (payload.exp && payload.exp < todayISO()) return { ok: false, expired: true, payload, reason: `license หมดอายุแล้วเมื่อ ${thDate(payload.exp)}` };
+  return { ok: true, payload };
+}
+function thDate(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('th-TH', { dateStyle: 'medium' }); }
+
+async function loadLicense() {
+  license = null;
+  let note = '';
+  if (settings.license) {
+    const r = await verifyLicense(settings.license);
+    if (r.ok) license = r.payload; else note = r.reason;
+  }
+  renderLicense(note);
+  if (license?.exp) {
+    const days = Math.ceil((new Date(license.exp) - new Date(todayISO())) / 86400000);
+    if (days <= 30) toast(`license จะหมดอายุใน ${days} วัน (${thDate(license.exp)})`, 6000);
+  }
+}
+function renderLicense(note = '') {
+  document.body.classList.toggle('trial', !license);
+  const chip = $('#btnLicense');
+  chip.hidden = !!license;
+  chip.textContent = note.includes('หมดอายุ') ? 'License หมดอายุ' : 'ทดลองใช้ — ใส่ license';
+  $$('.page-foot').forEach(f => (f.textContent = license ? `ใช้งานภายใต้ license: ${license.clinic}` : 'ฉบับทดลอง — ยังไม่ได้ลงทะเบียน license'));
+  $('#setLicenseInfo').textContent = license
+    ? `${license.clinic} · ${license.exp ? 'ใช้ได้ถึง ' + thDate(license.exp) : 'ไม่มีวันหมดอายุ'} · รหัส ${license.id}`
+    : (note || 'ยังไม่ได้ใส่ license — รายงานที่พิมพ์จะมีลายน้ำ "ฉบับทดลอง"');
+  $('#setLicense').textContent = license ? 'เปลี่ยน license' : 'ใส่ license';
+  $('#setLicenseRemove').disabled = !settings.license;
+}
+function openLicense() {
+  $('#licenseText').value = ''; $('#licenseMsg').textContent = ''; $('#licenseMsg').className = 'lic-msg';
+  const d = $('#licenseDlg'); if (!d.open) d.showModal();
+  $('#licenseText').focus();
+}
+function bindLicense() {
+  $('#btnLicense').onclick = openLicense;
+  $('#setLicense').onclick = openLicense;
+  $('#setLicenseRemove').onclick = async () => {
+    if (!confirm('ลบ license ออกจากเครื่องนี้? รายงานจะกลับไปมีลายน้ำ "ฉบับทดลอง"')) return;
+    await saveSettings({ license: null }); await loadLicense();
+  };
+  $('#licenseFile').onclick = () => {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.license,.txt';
+    input.onchange = async () => { const f = input.files[0]; if (f) $('#licenseText').value = (await f.text()).trim(); };
+    input.click();
+  };
+  $('#licenseApply').onclick = async () => {
+    const msg = $('#licenseMsg');
+    const r = await verifyLicense($('#licenseText').value);
+    if (!r.ok) { msg.textContent = r.reason; msg.className = 'lic-msg err'; return; }
+    await saveSettings({ license: $('#licenseText').value.replace(/\s+/g, '') });
+    await loadLicense();
+    msg.textContent = `ลงทะเบียนแล้ว: ${r.payload.clinic}`; msg.className = 'lic-msg ok';
+    setTimeout(() => $('#licenseDlg').close(), 900);
+    renderSettings();
+  };
+}
+
 // ------------------------------------------------------------------ offline app (service worker) & install
 
 function setupPWA() {
@@ -1213,7 +1303,7 @@ function redrawAll() { Object.keys(SLOTS).forEach(drawSlot); drawMuscle(); }
 async function init() {
   window.addEventListener('error', e => toast('เกิดข้อผิดพลาด: ' + (e.message || e.error), 5000));
   window.addEventListener('unhandledrejection', e => toast('เกิดข้อผิดพลาด: ' + (e.reason?.message || e.reason), 5000));
-  bindFields(); bindSlots(); buildEditorUI(); bindMuscle(); bindSettings(); setupPWA();
+  bindFields(); bindSlots(); buildEditorUI(); bindMuscle(); bindSettings(); bindLicense(); setupPWA();
 
   $('#btnNew').onclick = async () => {
     if (!(await leaveCurrentCase())) return;
@@ -1226,6 +1316,7 @@ async function init() {
   $('#btnOpen').onclick = openCases;
   $('#fileOpen').onchange = async e => { const f = e.target.files[0]; if (f && await loadCase(await f.text(), null)) $('#casesDlg').close(); };
   $('#btnPrint').onclick = () => window.print();
+  window.addEventListener('beforeprint', () => document.activeElement?.blur?.()); // no text cursor in the PDF
   document.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
@@ -1239,6 +1330,7 @@ async function init() {
 
   try { const st = await idbGet('settings'); if (st) Object.assign(settings, JSON.parse(st)); } catch { /* no settings yet */ }
   renderLogo();
+  await loadLicense();
   await loadFolder(); renderFolder();
 
   let saved = null;

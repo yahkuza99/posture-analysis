@@ -6,6 +6,8 @@ const CACHE = 'posture-' + VERSION;
 const FILES = [
   './',
   'index.html',
+  'terms.html',
+  'fonts/OFL.txt',
   'css/style.css',
   'css/fonts.css',
   'js/app.js',
@@ -48,10 +50,13 @@ self.addEventListener('fetch', e => {
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     // ?v= stamps only bust the HTTP cache; the cached copy is keyed without them
-    const hit = await cache.match(req, { ignoreSearch: true }) ||
-      (req.mode === 'navigate' ? await cache.match('index.html') : null);
+    const hit = await cache.match(req, { ignoreSearch: true });
     if (hit) return hit;
     try { return await fetch(req); }
-    catch { return new Response('ออฟไลน์อยู่ และไม่มีไฟล์นี้ในเครื่อง', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }); }
+    catch {
+      // offline and not cached: the app's own pages fall back to the app; anything else is unavailable
+      if (req.mode === 'navigate' && new URL(req.url).pathname.endsWith('/')) return cache.match('index.html');
+      return new Response('ออฟไลน์อยู่ และไม่มีไฟล์นี้ในเครื่อง', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
   })());
 });

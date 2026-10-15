@@ -38,6 +38,14 @@ jobs:
       # Stamp the commit into the page, app and service worker: browsers fetch fresh files and the
       # offline copy updates (a changed sw.js is what triggers the in-app "new version" prompt)
       - run: sed -i "s/__APP_VERSION__/${GITHUB_SHA::7}/g" index.html sw.js js/app.js
+      # Offline package for customers: unzip and open index.html in Chrome/Edge (no internet needed)
+      - name: Build download/posture-analysis.zip
+        run: |
+          mkdir -p _pkg/posture-analysis download
+          cp -r index.html terms.html sw.js manifest.webmanifest css js fonts icons _pkg/posture-analysis/
+          cp dist-files/README.txt _pkg/posture-analysis/
+          (cd _pkg && zip -qr ../download/posture-analysis.zip posture-analysis)
+          rm -rf _pkg
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
