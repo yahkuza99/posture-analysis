@@ -77,7 +77,6 @@ button.primary:hover { background: #158478; }
 .pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 0 60px; }
 
 .page {
-  position: relative;
   width: 210mm; height: 297mm;
   padding: 10mm 12mm;
   background: #fff;
@@ -316,19 +315,3 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
   input::placeholder { color: transparent; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-
-/* ---------- License ---------- */
-.lic-chip { margin-left: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; border-color: #e0a100; background: #fff8e1; color: #7a5600; }
-.page-foot { position: absolute; left: 12mm; right: 12mm; bottom: 3.5mm; font-size: 7pt; color: #8a9096; text-align: right; pointer-events: none; }
-body.trial .page::before { /* unlicensed copies print with a watermark */
-  content: "ฉบับทดลอง · TRIAL";
-  position: absolute; left: 50%; top: 50%; z-index: 5;
-  transform: translate(-50%, -50%) rotate(-35deg);
-  font: 700 48pt "Montserrat", "Sarabun", sans-serif; letter-spacing: 4px; white-space: nowrap;
-  color: rgba(227, 38, 46, .16);
-  pointer-events: none;
-}
-.lic-body { padding: 14px 18px; }
-.lic-body textarea { width: 100%; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; padding: 8px; border: 1px solid #b9bec4; border-radius: 6px; resize: vertical; word-break: break-all; }
-.lic-msg { min-height: 22px; margin-top: 8px; font-size: 13px; }
-.lic-msg.ok { color: #137a6e; } .lic-msg.err { color: #c62828; }

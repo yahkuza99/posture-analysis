@@ -16,7 +16,6 @@
 <!-- ============ Top bar (not printed) ============ -->
 <header class="appbar no-print">
   <div class="appbar-title">Posture Analysis</div>
-  <button id="btnLicense" type="button" class="lic-chip" hidden></button>
   <div class="appbar-actions">
     <button id="btnNew" type="button">เคสใหม่</button>
     <button id="btnOpen" type="button" title="Ctrl+O">เปิดเคส</button>
@@ -36,7 +35,6 @@
 
   <!-- ============ Page 1: Posture chart ============ -->
   <section class="page">
-    <div class="page-foot"></div>
     <div class="page-head">
       <div class="logo-slot"></div>
       <div class="head-right">
@@ -63,7 +61,6 @@
 
   <!-- ============ Page 2: Functional analysis ============ -->
   <section class="page">
-    <div class="page-foot"></div>
     <div class="page-head">
       <div class="logo-slot"></div>
       <div class="head-right">
@@ -98,7 +95,6 @@
 
   <!-- ============ Page 3: Muscle chart ============ -->
   <section class="page">
-    <div class="page-foot"></div>
     <div class="page-head">
       <div class="logo-slot"></div>
       <div class="head-right">
@@ -213,30 +209,12 @@
     <div><b>นักกายภาพบำบัด (ค่าเริ่มต้น)</b><div class="set-sub">กรอกให้อัตโนมัติเมื่อเริ่มเคสใหม่</div></div>
     <input id="setTherapist" class="set-input" placeholder="ชื่อนักกายภาพ">
   </section>
-  <section class="set-row">
-    <div><b>License</b><div class="set-sub" id="setLicenseInfo"></div></div>
-    <div class="set-btns"><button type="button" id="setLicense">ใส่ license</button><button type="button" id="setLicenseRemove">ลบ</button></div>
-  </section>
   <section class="set-about">
     <div>Posture Analysis · เวอร์ชัน <span id="appVersion"></span> · <span id="offlineState"></span></div>
     <div class="set-sub">ข้อมูลผู้รับบริการเก็บอยู่ในเครื่องนี้เท่านั้น ไม่ถูกส่งออกไปที่ใด
       ระบบนี้เป็นเครื่องมือช่วยบันทึกและจัดทำรายงาน ไม่ใช่เครื่องมือวินิจฉัย ค่าที่วัดได้ขึ้นกับตำแหน่งที่ผู้ใช้วางจุด
       · <a href="terms.html" target="_blank">ข้อตกลงการใช้งานและความเป็นส่วนตัว</a></div>
   </section>
-</dialog>
-
-<!-- ============ License entry ============ -->
-<dialog id="licenseDlg" class="dlg no-print">
-  <div class="dlg-head"><b>ใส่ License</b><button type="button" class="dlg-x" data-close>✕</button></div>
-  <div class="lic-body">
-    <p class="set-sub">วาง license key ที่ได้รับ หรือเปิดไฟล์ <code>.license</code> — ไม่ต้องต่ออินเทอร์เน็ต</p>
-    <textarea id="licenseText" rows="5" placeholder="PA1-…"></textarea>
-    <div id="licenseMsg" class="lic-msg"></div>
-  </div>
-  <div class="dlg-foot">
-    <button type="button" id="licenseFile">เปิดไฟล์ license…</button>
-    <button type="button" id="licenseApply" class="primary">ยืนยัน</button>
-  </div>
 </dialog>
 
 <div id="updateBar" class="update-bar no-print" hidden>
