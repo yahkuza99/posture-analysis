@@ -294,7 +294,6 @@ input:focus { outline: 2px solid var(--teal); outline-offset: -2px; }
 .ed-proto .nm small { color: var(--muted); display: block; font-size: 11px; }
 #edProtoCount { color: var(--teal); font-weight: 600; }
 details.ed-group summary { cursor: pointer; margin-bottom: 6px; }
-.ed-scale { font-size: 12px; color: var(--muted); }
 .ed-analysis { display: flex; flex-direction: column; gap: 6px; }
 .ed-analysis .none { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .ed-finding { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; padding: 7px 8px; border-radius: 6px; background: #f4f6f7; font-size: 13px; line-height: 1.45; cursor: pointer; }

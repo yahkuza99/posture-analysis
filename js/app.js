@@ -57,7 +57,6 @@ const ICONS = {
   angle:  svg('<path d="M6 26 L26 26 M6 26 L20 8" stroke="#e3262e" stroke-width="3"/><path d="M13 26 A 7 7 0 0 0 10.3 20.5" stroke="#1d1d1f" stroke-width="1.6"/>'),
   qangle: svg('<path d="M12 4 L16 18 L15 29" stroke="#e8b400" stroke-width="3"/><path d="M16 18 L19.5 29" stroke="#e8b400" stroke-width="1.6" stroke-dasharray="2 2.5"/><circle cx="16" cy="18" r="2.6" fill="#f4c20d" stroke="#1a1a1a" stroke-width="1.3"/>'),
   text:   svg('<path d="M7 26 L14 6 L21 26 M9.5 19 H18.5" stroke="#1d1d1f" stroke-width="2.6"/><path d="M23 12 V26" stroke="#1d1d1f" stroke-width="2"/>'),
-  scale:  svg('<rect x="3" y="11" width="26" height="10" rx="1.5" stroke="#1d1d1f" stroke-width="2"/><path d="M8 11 V15 M13 11 V17 M18 11 V15 M23 11 V17" stroke="#1d1d1f" stroke-width="1.6"/>'),
 };
 
 const TOOLS = [
@@ -72,7 +71,6 @@ const TOOLS = [
   { id: 'angle',  label: 'มุม',         key: 'A', color: '#e3262e', clicks: 3 },
   { id: 'qangle', label: 'Q-angle',     key: 'Q', color: '#f4c20d', clicks: 3 },
   { id: 'text',   label: 'ข้อความ',     key: 'T', color: '#111111', clicks: 1 },
-  { id: 'scale',  label: 'ตั้งสเกล (ซม.)', key: 'K', color: '#ffffff', clicks: 2 },
 ];
 // Short on purpose: one glance, no reading.
 const TOOL_HINTS = {
@@ -86,7 +84,6 @@ const TOOL_HINTS = {
   angle:  ['คลิกปลายเส้นที่ 1', 'คลิกมุม', 'คลิกปลายเส้นที่ 2'],
   qangle: ['คลิก ASIS', 'คลิกกลางลูกสะบ้า', 'คลิก Tibial tuberosity'],
   text:   'คลิกที่จะวางข้อความ',
-  scale:  ['คลิกปลายไม้วัด / ช่องกริด', 'คลิกอีกปลาย แล้วใส่ ซม.'],
 };
 
 // ------------------------------------------------------------------ state
@@ -715,12 +712,6 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
   const top = ty, bottom = ty + photo.h * s;
   if (opts.analysis) drawAnalysis(ctx, opts.analysis, P, top, bottom, u);
   if (opts.protocol) drawLandmarks(ctx, photo, opts.protocol, P, u, opts);
-  if (opts.editor && photo.scale) {
-    const [a, b] = [P(photo.scale.a), P(photo.scale.b)];
-    ctx.save(); ctx.lineWidth = 1.6 * u; ctx.setLineDash([5 * u, 4 * u]); ctx.strokeStyle = '#fff';
-    ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.restore();
-    label(ctx, `${photo.scale.cm} ซม.`, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 10 * u, u, '#111');
-  }
 
   photo.shapes.forEach((sh, idx) => {
     const sel = opts.selected === idx;
@@ -1083,8 +1074,6 @@ function skipPoint() { if (ed.protoId) { ed.cur = nextMissing(ed.cur) || ed.cur;
 function renderAnalysis() {
   const box = $('#edAnalysis');
   const an = analyze(ed.photo, ed.protoId);
-  const sc = ed.photo.scale;
-  $('#edScaleInfo').textContent = sc ? `สเกล: ${sc.cm} ซม. = ${Math.round(sc.pxPerCm * sc.cm)} px — ระยะแสดงเป็นเซนติเมตร` : 'ยังไม่ได้ตั้งสเกล — ระยะการเยื้องแสดงเป็นทิศทาง (ตั้งสเกลได้ที่เครื่องมืออิสระ)';
   const key = JSON.stringify(an.findings.map(f => f.text));
   if (box.dataset.key === key) return; box.dataset.key = key;
   if (!an.findings.length) {
@@ -1318,12 +1307,6 @@ function placePoint(img) {
     if (sh.type === 'text') {
       const txt = prompt('ข้อความ:'); if (!txt) { updateHint(); drawEditor(); return; }
       sh.text = txt;
-    }
-    if (sh.type === 'scale') {
-      const cm = parseFloat(String(prompt('ระยะจริงระหว่างสองจุด (เซนติเมตร):', '10') || '').replace(',', '.'));
-      const px = Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]);
-      if (cm > 0 && px > 0) { snapshot(); ed.photo.scale = { a: sh.pts[0], b: sh.pts[1], cm, pxPerCm: px / cm }; toast(`ตั้งสเกลแล้ว: ${cm} ซม.`); }
-      setTool('select'); return;
     }
     snapshot(); ed.photo.shapes.push(sh); ed.selected = -1;
   }
