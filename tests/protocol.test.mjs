@@ -38,10 +38,10 @@ check(has(r, 'สะบักขวาห่าง'), 'posterior: wider right sc
 // Lateral, facing image-right: CVA 37° (forward head), knee behind the plumb line
 r = analyze({ lm: { tragus: [340, 170], c7: [300, 200], acr: [305, 260], gt: [300, 470], knee: [280, 630], mall: [300, 760] } }, 'lateral');
 check(has(r, 'ศีรษะยื่นไปด้านหน้า (CVA 37°'), 'lateral: CVA computed and flagged', texts(r));
-check(has(r, 'เข่าอยู่หลังแนวดิ่ง'), 'lateral (facing right): knee behind plumb = hyperextension', texts(r));
+check(has(r, 'เข่าอยู่หลังแกน Y'), 'lateral (facing right): knee behind plumb = hyperextension', texts(r));
 // Same posture mirrored (facing image-left) must give the same findings
 r = analyze({ lm: { tragus: [260, 170], c7: [300, 200], acr: [295, 260], gt: [300, 470], knee: [320, 630], mall: [300, 760] } }, 'lateral');
-check(has(r, 'CVA 37°') && has(r, 'เข่าอยู่หลังแนวดิ่ง'), 'lateral (facing left): mirrored photo gives the same findings', texts(r));
+check(has(r, 'CVA 37°') && has(r, 'เข่าอยู่หลังแกน Y'), 'lateral (facing left): mirrored photo gives the same findings', texts(r));
 // With a scale, distances are in centimetres
 r = analyze({ scale: { pxPerCm: 4 }, lm: { tragus: [340, 170], c7: [300, 200], acr: [305, 260], gt: [300, 470], knee: [280, 630], mall: [300, 760] } }, 'lateral');
 check(has(r, '≈ 5.0 ซม.'), 'lateral: offsets shown in cm when a scale is set', texts(r));

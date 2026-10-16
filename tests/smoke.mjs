@@ -77,7 +77,7 @@ try {
   const before = await page.locator('[data-findings="row1"] .finding').count();
   await page.click('#edInsert');
   check(await page.locator('[data-findings="row1"] .finding').count() > before, 'selected findings go into the report');
-  await page.keyboard.press('g'); await at(0.5, 0.9);
+  await page.keyboard.press('y'); await at(0.5, 0.9);
   await page.keyboard.press('l'); await at(0.42, 0.25); await at(0.58, 0.27);
   check((await page.locator('#edMeasures').innerText()).includes('ข้างขวาสูงกว่า'), 'free level line reports the patient side (front view is mirrored)');
   await page.click('#edDone');
@@ -94,7 +94,7 @@ try {
   await page.mouse.move(sb.x + sb.width / 2 + 40, sb.y + sb.height / 2, { steps: 4 });
   check(await page.locator('[data-slot="front"].dragging').count() === 1 && !(await page.locator('[data-slot="front"] .gbadge').textContent()), 'centre guides show while dragging, no snap when off-centre');
   await page.mouse.move(sb.x + sb.width / 2 + 3, sb.y + sb.height / 2, { steps: 4 });
-  check((await page.locator('[data-slot="front"] .gbadge').textContent()).includes('เส้นดิ่งอยู่กึ่งกลาง'), 'photo snaps so the plumb line sits on the frame centre');
+  check((await page.locator('[data-slot="front"] .gbadge').textContent()).includes('แกน Y อยู่กึ่งกลาง'), 'photo snaps so the plumb line sits on the frame centre');
   await page.mouse.up();
 
   // case folder: choose, save, autosave, reopen from the list

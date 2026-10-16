@@ -55,7 +55,7 @@ const PROTOCOLS = {
       P('acr', 'Acr', 'Acromion', 'ปลายไหล่ (Acromion)'),
       P('gt', 'GT', 'Greater trochanter', 'ปุ่มกระดูกต้นขา (Greater trochanter)'),
       P('knee', 'Knee', 'แนวข้อเข่าด้านนอก', 'แนวข้อเข่าด้านนอก (Lateral knee joint line)'),
-      P('mall', 'Mall', 'ตาตุ่มนอก', 'ตาตุ่มนอก (Lateral malleolus) — แนวดิ่งจะลากผ่านจุดนี้'),
+      P('mall', 'Mall', 'ตาตุ่มนอก', 'ตาตุ่มนอก (Lateral malleolus) — แกน Y จะลากผ่านจุดนี้'),
     ],
   },
   sls: {
@@ -188,7 +188,7 @@ const ANALYZE = {
       const dx = m[0] - base[0], pct = Math.abs(dx) / width * 100;
       out.lines.push({ t: 'shift', from: [base[0], m[1]], to: m, ok: pct < T.shiftPct });
       out.findings.push(pct < T.shiftPct
-        ? { key: 'shift', text: 'ลำตัวอยู่กึ่งกลางแนวดิ่ง', flag: false }
+        ? { key: 'shift', text: 'ลำตัวอยู่กึ่งกลางแกน Y', flag: false }
         : { key: 'shift', text: `ลำตัวเยื้องไปทาง${TH[sideOfDx(dx, v)]}${distText(Math.abs(dx), ctx.scale)}`, flag: true });
     }
   },
@@ -259,10 +259,10 @@ const ANALYZE = {
         : { key: 'cva', text: `ตำแหน่งศีรษะปกติ (CVA ${Math.round(cva)}°)`, flag: false });
     }
     const parts = [
-      ['tragus', 'ติ่งหู', 'ศีรษะอยู่หน้าแนวดิ่ง', 'ศีรษะอยู่หลังแนวดิ่ง'],
-      ['acr', 'ไหล่', 'ไหล่อยู่หน้าแนวดิ่ง (ไหล่ห่อ / ยื่นไปด้านหน้า)', 'ไหล่อยู่หลังแนวดิ่ง'],
-      ['gt', 'สะโพก', 'สะโพกยื่นไปด้านหน้าแนวดิ่ง (Sway back)', 'สะโพกอยู่หลังแนวดิ่ง'],
-      ['knee', 'เข่า', 'เข่าอยู่หน้าแนวดิ่ง (เข่างอ)', 'เข่าอยู่หลังแนวดิ่ง (เข่าแอ่น / Hyperextension)'],
+      ['tragus', 'ติ่งหู', 'ศีรษะอยู่หน้าแกน Y', 'ศีรษะอยู่หลังแกน Y'],
+      ['acr', 'ไหล่', 'ไหล่อยู่หน้าแกน Y (ไหล่ห่อ / ยื่นไปด้านหน้า)', 'ไหล่อยู่หลังแกน Y'],
+      ['gt', 'สะโพก', 'สะโพกยื่นไปด้านหน้าแกน Y (Sway back)', 'สะโพกอยู่หลังแกน Y'],
+      ['knee', 'เข่า', 'เข่าอยู่หน้าแกน Y (เข่างอ)', 'เข่าอยู่หลังแกน Y (เข่าแอ่น / Hyperextension)'],
     ];
     for (const [id, , ahead, behind] of parts) {
       const p = L[id], o = off(p); if (o == null) continue;

@@ -48,8 +48,9 @@ const TOOLS = [
   { id: 'guide',  label: 'วางจุดตามลำดับ', key: 'M' },
   { id: 'dashed', label: 'เส้นตรง',     key: 'D', color: '#e3262e', clicks: 2 },
   { id: 'curve',  label: 'เส้นโค้ง',     key: 'C', color: '#f4c20d' },
-  { id: 'plumb',  label: 'เส้นดิ่ง',    key: 'G', color: '#2dbd3a', clicks: 1 },
-  { id: 'line',   label: 'เส้นระดับ (องศา)', key: 'L', color: '#e3262e', clicks: 2 },
+  { id: 'plumb',  label: 'แกน Y (แนวตั้ง)', key: 'Y', color: '#2dbd3a', clicks: 1 },
+  { id: 'hline',  label: 'แกน X (แนวนอน)', key: 'X', color: '#2dbd3a', clicks: 1 },
+  { id: 'line',   label: 'เส้นวัดความเอียง', key: 'L', color: '#e3262e', clicks: 2 },
   { id: 'point',  label: 'จุด',        key: 'P', color: '#f4c20d', clicks: 1 },
   { id: 'select', label: 'เลือก/ย้าย', key: 'V' },
   { id: 'angle',  label: 'มุม',         key: 'A', color: '#e3262e', clicks: 3 },
@@ -62,8 +63,9 @@ const TOOL_HINTS = {
   curve:  'กดค้างแล้วลากตามแนวที่ต้องการ เช่น แนวกระดูกสันหลัง ระบบช่วยเกลาเส้นให้เนียน',
   select: 'คลิกเส้น/จุดเพื่อเลือก ลากจุดเพื่อปรับตำแหน่ง ลากตัวเส้นเพื่อย้ายทั้งเส้น',
   point:  'คลิกเพื่อวางจุด landmark',
-  plumb:  'คลิกที่ตาตุ่ม/กึ่งกลางฐาน เพื่อวางเส้นดิ่ง (แนวตั้ง)',
-  line:   ['ลากจากไหล่ข้างหนึ่งไปอีกข้าง (หรือคลิกทีละจุด) — แสดงมุมเอียงให้', 'คลิกจุดที่ 2 (อีกข้าง)'],
+  plumb:  'คลิกที่ตำแหน่งกึ่งกลาง เช่น กึ่งกลางระหว่างเท้า จะได้แกน Y เป็นเส้นแนวตั้งเต็มรูป',
+  line:   ['ลากจากไหล่ข้างหนึ่งไปอีกข้าง (หรือคลิกทีละจุด) — บอกองศาที่เอียงให้', 'คลิกจุดที่ 2 (อีกข้าง)'],
+  hline:  'คลิกที่ระดับที่ต้องการ จะได้แกน X เป็นเส้นแนวนอนเต็มรูป เช่น ระดับไหล่ หรือระดับสะโพก',
   angle:  ['คลิกปลายแขนมุมที่ 1', 'คลิกจุดยอดมุม', 'คลิกปลายแขนมุมที่ 2'],
   qangle: ['คลิก ASIS', 'คลิกกึ่งกลางลูกสะบ้า (Patella)', 'คลิก Tibial tuberosity'],
   text:   'คลิกตำแหน่งที่จะวางข้อความ',
@@ -657,7 +659,7 @@ function measuresOf(photo, view) {
     if (s.type === 'line') {
       const t = lineTilt(s);
       const side = t.higher && patientSide(t.higher, view);
-      let txt = `เส้นระดับเอียง ${t.deg.toFixed(1)}°`;
+      let txt = `เส้นเอียง ${t.deg.toFixed(1)}°`;
       if (side) txt += ` (ข้าง${TH_SIDE[side]}สูงกว่า)`;
       else if (t.higher) txt += ` (${t.higher === 'imgRight' ? 'ขวา' : 'ซ้าย'}ของภาพสูงกว่า)`;
       out.push({ i, txt });
@@ -716,9 +718,14 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
     switch (sh.type) {
       case 'point':
         landmark(ctx, pts[0], u, sh.color); break;
-      case 'plumb':
+      case 'plumb': // แกน Y: full-height vertical line
         ctx.beginPath(); ctx.moveTo(pts[0][0], top); ctx.lineTo(pts[0][0], bottom); ctx.stroke();
-        landmark(ctx, pts[0], u, sh.color); break;
+        if (sel && opts.editor) landmark(ctx, pts[0], u, sh.color);
+        break;
+      case 'hline': // แกน X: full-width horizontal line
+        ctx.beginPath(); ctx.moveTo(tx, pts[0][1]); ctx.lineTo(tx + photo.w * s, pts[0][1]); ctx.stroke();
+        if (sel && opts.editor) landmark(ctx, pts[0], u, sh.color);
+        break;
       case 'line': {
         const [a, b] = pts; const dx = b[0] - a[0], dy = b[1] - a[1], ext = 0.18;
         ctx.beginPath(); ctx.moveTo(a[0] - dx * ext, a[1] - dy * ext); ctx.lineTo(b[0] + dx * ext, b[1] + dy * ext); ctx.stroke();
@@ -964,7 +971,7 @@ function bindSlots() {
       const start = { x: e.clientX, y: e.clientY, cx: (el.clientWidth / 2 - tf.tx) / s, cy: (el.clientHeight / 2 - tf.ty) / s };
       // snap targets: the plumb line (the person's centre) first, then the photo's own centre
       const plumb = plumbX(id);
-      const xTargets = [[plumb, 'เส้นดิ่งอยู่กึ่งกลาง'], [photo.w / 2, 'กึ่งกลางรูป']].filter(t => t[0] != null);
+      const xTargets = [[plumb, 'แกน Y อยู่กึ่งกลาง'], [photo.w / 2, 'กึ่งกลางรูป']].filter(t => t[0] != null);
       const SNAP = 8; // screen px
       const guides = el.querySelector('.slot-guides');
       el.classList.add('dragging');
@@ -1215,6 +1222,9 @@ function hitBody(sp) {
     if (sh.type === 'plumb') {
       const top = ed.ty, bottom = ed.ty + ed.photo.h * ed.s;
       if (Math.abs(sp[0] - pts[0][0]) < 6 && sp[1] >= top && sp[1] <= bottom) return i;
+    } else if (sh.type === 'hline') {
+      const left = ed.tx, right = ed.tx + ed.photo.w * ed.s;
+      if (Math.abs(sp[1] - pts[0][1]) < 6 && sp[0] >= left && sp[0] <= right) return i;
     } else if (sh.type === 'text') {
       if (sp[0] >= pts[0][0] - 4 && sp[0] <= pts[0][0] + 160 && Math.abs(sp[1] - pts[0][1]) < 12) return i;
     } else {
@@ -1357,7 +1367,7 @@ function deleteSelected() {
 
 function renderMeasures() {
   const box = $('#edMeasures'); const m = measuresOf(ed.photo, SLOTS[ed.id].view);
-  if (!m.length) { box.innerHTML = '<div class="none">ยังไม่มี — ใช้เครื่องมือเส้นระดับ, มุม หรือ Q-angle</div>'; return; }
+  if (!m.length) { box.innerHTML = '<div class="none">ยังไม่มี — ใช้เส้นวัดความเอียง, มุม หรือ Q-angle</div>'; return; }
   const key = JSON.stringify(m.map(x => x.txt)) + ed.selected;
   if (box.dataset.key === key) return; box.dataset.key = key;
   box.innerHTML = '';
