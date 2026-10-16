@@ -2,7 +2,7 @@
 // the server, shared by all computers. Two "computers" are two browser contexts here.
 // Run: node tests/server.test.mjs   (needs Python 3 on PATH as python3/python, or set PYTHON)
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -111,6 +111,20 @@ try {
   check(await c.locator('#setFolder').isDisabled() && await c.locator('#setBackupFolder').isDisabled(), 'no local folder pickers on the server');
   check((await c.locator('#setBackupInfo').textContent()).includes('ทุกคืน'), 'settings say the server backs up every night');
   check(await c.locator('#btnBackup').isHidden(), 'no "make a backup" reminder on the server');
+
+  // ---- nightly backup ZIP restores through the app
+  const ZIPS = mkdtempSync(join(tmpdir(), 'posture-zips-')), MIRROR = join(ZIPS, 'mirror');
+  const bk = spawnSync(PY, [join(ROOT, 'server', 'backup.py'), '--data', DATA, '--zip-dir', ZIPS, '--keep', '2', '--mirror', MIRROR], { encoding: 'utf8' });
+  const zipName = readdirSync(ZIPS).find(n => n.endsWith('.zip'));
+  check(bk.status === 0 && !!zipName, 'nightly backup writes a ZIP: ' + (bk.stdout || bk.stderr).trim());
+  check(readdirSync(MIRROR).includes(name), 'nightly backup mirrors the case folder');
+  await c.evaluate(n => fetch('api/cases/' + encodeURIComponent(n), { method: 'DELETE', headers: { 'X-Posture': '1' } }), name);
+  check(!diskCases().includes(name) && readdirSync(join(DATA, '.trash')).some(n => n.startsWith(name)), 'deleting a case moves it to .trash');
+  const [rc] = await Promise.all([c.waitForEvent('filechooser'), c.click('#setRestore')]);
+  await rc.setFiles(join(ZIPS, zipName));
+  await c.waitForFunction(() => document.querySelector('#toast').textContent.includes('กู้คืนแล้ว'), null, { timeout: 8000 }).catch(() => {});
+  check(diskCases().includes(name) && diskCase(name).impression === 'A หลังเปิดใหม่', 'the server backup restores the case through the app');
+  rmSync(ZIPS, { recursive: true, force: true });
 
   const audit = readFileSync(join(DATA, '.audit.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   check(audit.some(r => r.action === 'conflict') && audit.some(r => r.action === 'create'), 'saves and refused saves are logged');
