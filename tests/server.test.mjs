@@ -108,7 +108,8 @@ try {
 
   // ---- settings and backup UI fit the server
   await c.click('#btnSettings');
-  check(await c.locator('#setFolder').isDisabled() && await c.locator('#setBackupFolder').isDisabled(), 'no local folder pickers on the server');
+  check(await c.locator('#setFolderRow').isHidden() && await c.locator('#setBackupFolder').isHidden(), 'no local folder pickers on the server');
+  check((await c.locator('#privacyWhere').textContent()).includes('เครื่องกลาง'), 'privacy note says cases live on the central machine');
   check((await c.locator('#setBackupInfo').textContent()).includes('ทุกคืน'), 'settings say the server backs up every night');
   check(await c.locator('#btnBackup').isHidden(), 'no "make a backup" reminder on the server');
 

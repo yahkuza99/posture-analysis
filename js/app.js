@@ -477,14 +477,14 @@ function renderBackup() {
   chip.textContent = settings.lastBackup ? `สำรองข้อมูลล่าสุด ${Math.floor(backupAgeDays())} วันก่อน` : 'ยังไม่เคยสำรองข้อมูล';
   if (!$('#setBackupInfo')) return;
   const last = settings.lastBackup ? new Date(settings.lastBackup).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ยังไม่เคย';
-  $('#setBackupInfo').textContent = SERVER ? `${SERVER.name}สำรองเคสทั้งหมดให้ทุกคืน · กด "สำรองทั้งหมดตอนนี้" เพื่อดาวน์โหลดไฟล์ ZIP เก็บเองเพิ่มได้`
+  $('#setBackupInfo').textContent = SERVER ? 'สำรองให้อัตโนมัติทุกคืน'
     : !FS_OK ? 'ต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'
     : (backup.handle
       ? `โฟลเดอร์สำรอง "${backup.handle.name}"${backup.perm === 'granted' ? ' · คัดลอกทุกครั้งที่บันทึก' : ' (ต้องกดอนุญาตอีกครั้ง — กด "สำรองทั้งหมดตอนนี้")'}`
       : 'ยังไม่ได้เลือกโฟลเดอร์สำรอง — แนะนำฮาร์ดดิสก์ภายนอกหรือ NAS') + ` · สำรองทั้งหมดล่าสุด: ${last}`;
   $('#setBackupFolder').textContent = backup.handle ? 'เปลี่ยนโฟลเดอร์สำรอง' : 'เลือกโฟลเดอร์สำรอง';
   $('#setBackupFolder').disabled = $('#setBackupNow').disabled = !FS_OK;
-  if (SERVER) $('#setBackupFolder').disabled = true;
+  $('#setBackupFolder').hidden = !!SERVER;
 }
 
 function renderFolder() {
@@ -1643,8 +1643,9 @@ function pickLogo() {
 
 function openSettings() { renderSettings(); const d = $('#settingsDlg'); if (!d.open) d.showModal(); }
 function renderSettings() {
-  $('#setFolderInfo').textContent = SERVER ? `${SERVER.name} · เคสจากทุกเครื่องในคลินิกบันทึกรวมที่นี่อัตโนมัติ`
-    : !FS_OK ? 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ (ใช้ Chrome หรือ Edge) — ไฟล์เคสจะดาวน์โหลดไปที่โฟลเดอร์ Downloads'
+  $('#setFolderRow').hidden = !!SERVER;
+  if (SERVER) $('#privacyWhere').textContent = 'ข้อมูลผู้รับบริการเก็บอยู่ที่เครื่องกลางในคลินิกเท่านั้น';
+  $('#setFolderInfo').textContent = !FS_OK ? 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ (ใช้ Chrome หรือ Edge) — ไฟล์เคสจะดาวน์โหลดไปที่โฟลเดอร์ Downloads'
     : folder.handle ? `โฟลเดอร์ "${folder.handle.name}"${folder.perm === 'granted' ? '' : ' (ต้องกดอนุญาตอีกครั้ง)'} · เคสบันทึกอัตโนมัติลงโฟลเดอร์นี้`
     : 'ยังไม่ได้เลือก — เลือกโฟลเดอร์ในเครื่อง (เช่น Documents/Posture Cases) เพื่อเก็บไฟล์เคสทั้งหมด';
   $('#setFolder').textContent = folder.handle ? 'เปลี่ยนโฟลเดอร์' : 'เลือกโฟลเดอร์';

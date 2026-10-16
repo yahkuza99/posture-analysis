@@ -211,7 +211,7 @@
 <!-- ============ Settings ============ -->
 <dialog id="settingsDlg" class="dlg no-print">
   <div class="dlg-head"><b>ตั้งค่า</b><button type="button" class="dlg-x" data-close>✕</button></div>
-  <section class="set-row">
+  <section class="set-row" id="setFolderRow">
     <div><b>ที่เก็บไฟล์เคส</b><div class="set-sub" id="setFolderInfo"></div></div>
     <button type="button" id="setFolder">เลือกโฟลเดอร์</button>
   </section>
@@ -237,7 +237,7 @@
   </section>
   <section class="set-about">
     <div>Posture Analysis · เวอร์ชัน <span id="appVersion"></span> · <span id="offlineState"></span></div>
-    <div class="set-sub">ข้อมูลผู้รับบริการเก็บอยู่ในเครื่องนี้เท่านั้น ไม่ถูกส่งออกไปที่ใด
+    <div class="set-sub"><span id="privacyWhere">ข้อมูลผู้รับบริการเก็บอยู่ในเครื่องนี้เท่านั้น</span> ไม่ถูกส่งออกไปที่ใด
       ระบบนี้เป็นเครื่องมือช่วยบันทึกและจัดทำรายงาน ไม่ใช่เครื่องมือวินิจฉัย ค่าที่วัดได้ขึ้นกับตำแหน่งที่ผู้ใช้วางจุด
       · <a href="terms.html" target="_blank">ข้อตกลงการใช้งานและความเป็นส่วนตัว</a></div>
   </section>
