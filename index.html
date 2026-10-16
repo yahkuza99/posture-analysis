@@ -15,12 +15,14 @@
 
 <!-- ============ Top bar (not printed) ============ -->
 <header class="appbar no-print">
-  <div class="appbar-title">Posture Analysis</div>
+  <div class="brand">
+    <img src="icons/icon-192.png" alt="" width="32" height="32">
+    <div class="brand-text"><b>Posture Analysis</b><span>รายงานประเมินท่าทาง</span></div>
+  </div>
   <div class="appbar-actions">
-    <button id="btnNew" type="button">เคสใหม่</button>
-    <button id="btnOpen" type="button" title="Ctrl+O">เปิดเคส</button>
-    <button id="btnSave" type="button" title="Ctrl+S">บันทึก</button>
-    <button id="btnPrint" type="button" class="primary" title="Ctrl+P">พิมพ์ / PDF</button>
+    <button id="btnNew" type="button" class="tb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>เคสใหม่</span></button>
+    <button id="btnOpen" type="button" class="tb" title="Ctrl+O"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>เปิดเคส</span></button>
+    <button id="btnSave" type="button" class="tb" title="Ctrl+S"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3M7 21v-7h10v7"/></svg><span>บันทึก</span></button>
     <input id="fileOpen" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="appbar-status">
@@ -28,8 +30,9 @@
     <span id="saveStatus"></span>
   </div>
   <button id="btnBackup" type="button" class="backup-chip" hidden></button>
-  <button id="btnInstall" type="button" hidden>ติดตั้งแอป</button>
-  <button id="btnSettings" type="button" title="ตั้งค่า">ตั้งค่า</button>
+  <button id="btnInstall" type="button" class="tb ghost" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>ติดตั้งแอป</span></button>
+  <button id="btnSettings" type="button" class="tb icon-only" title="ตั้งค่า" aria-label="ตั้งค่า"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  <button id="btnPrint" type="button" class="tb primary" title="Ctrl+P"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg><span>พิมพ์ / PDF</span></button>
 </header>
 
 <main class="pages">
@@ -152,20 +155,19 @@
 <div id="editor" class="editor no-print" hidden>
   <aside class="ed-side">
     <div class="ed-title" id="edTitle">แก้ไขรูป</div>
-    <div class="ed-group">
-      <div class="ed-label">เครื่องมือ</div>
-      <div class="ed-tools" id="edTools"></div>
-    </div>
-    <div class="ed-group">
-      <div class="ed-label">สี</div>
-      <div class="ed-colors" id="edColors"></div>
-      <label class="ed-width">ความหนาเส้น <input type="range" id="edWidth" min="0.6" max="3" step="0.2" value="1.2"></label>
-    </div>
+    <div class="ed-tools" id="edTools"></div>
+    <details class="ed-more">
+      <summary title="เครื่องมืออื่น">⋯</summary>
+      <div class="ed-tools" id="edToolsMore"></div>
+    </details>
+    <div class="ed-colors" id="edColors"></div>
+    <label class="ed-width" title="ความหนาเส้น"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16" stroke-width="1.2"/><path d="M4 12h16" stroke-width="2.4"/><path d="M4 18h16" stroke-width="4"/></svg>
+      <input type="range" id="edWidth" min="0.6" max="3" step="0.2" value="1.2" aria-label="ความหนาเส้น"></label>
     <div class="ed-hint" id="edHint"></div>
-    <div class="ed-group ed-row">
-      <button type="button" id="edUndo" title="Ctrl+Z">ย้อนกลับ</button>
-      <button type="button" id="edDelete" title="Delete">ลบที่เลือก</button>
-      <button type="button" id="edClear">ล้างเส้นทั้งหมด</button>
+    <div class="ed-row ed-actions">
+      <button type="button" id="edUndo" title="ย้อนกลับ (Ctrl+Z)" aria-label="ย้อนกลับ"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button type="button" id="edDelete" title="ลบเส้นที่เลือก (Delete)" aria-label="ลบเส้นที่เลือก"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      <button type="button" id="edClear" title="ล้างเส้นทั้งหมด" aria-label="ล้างเส้นทั้งหมด"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M7 16 17 6M8.5 6.5l9 9"/></svg> ล้าง</button>
     </div>
     <details class="ed-group ed-advanced" id="edProtoDetails">
       <summary>จุด Landmark และวิเคราะห์อัตโนมัติ <small>(ไม่บังคับ)</small></summary>
@@ -178,11 +180,6 @@
         <button type="button" id="edResetPts">เริ่มใหม่</button>
       </div>
     </details>
-    <div class="ed-help">
-      กดค้างแล้วลาก = ลากเส้น (ใช้ปากกา Wacom ได้)<br>
-      ย้าย/ลบเส้น: เลือก "เลือก/ย้าย" แล้วคลิกเส้น<br>
-      ลูกกลิ้ง = ซูม · Space ค้าง + ลาก หรือคลิกขวาลาก = เลื่อนภาพ
-    </div>
     <div class="ed-group ed-row ed-bottom">
       <button type="button" id="edFit">พอดีจอ</button>
       <button type="button" id="edDone" class="primary">เสร็จ</button>

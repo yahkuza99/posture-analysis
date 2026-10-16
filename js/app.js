@@ -44,6 +44,22 @@ const COLORS = ['#e3262e', '#2dbd3a', '#f4c20d', '#1e88e5', '#ffffff', '#111111'
 
 const { PROTOCOLS, analyze } = window.PostureProtocol;
 
+// Tool icons draw the line itself (colour and shape), so nobody has to read a label.
+const svg = body => `<svg viewBox="0 0 32 32" width="30" height="30" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const ICONS = {
+  dashed: svg('<path d="M6 25 L26 7" stroke="#e3262e" stroke-width="3"/>'),
+  curve:  svg('<path d="M10 5 C 22 10, 8 18, 18 27" stroke="#e8b400" stroke-width="3"/>'),
+  plumb:  svg('<path d="M16 3 V29" stroke="#2dbd3a" stroke-width="3"/><path d="M4 16 H28" stroke="#c9ced3" stroke-width="1.5" stroke-dasharray="2 3"/>'),
+  hline:  svg('<path d="M3 16 H29" stroke="#2dbd3a" stroke-width="3"/><path d="M16 4 V28" stroke="#c9ced3" stroke-width="1.5" stroke-dasharray="2 3"/>'),
+  line:   svg('<path d="M4 13 H28" stroke="#c9ced3" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M4 19 L28 9" stroke="#e3262e" stroke-width="3"/><path d="M14 13 A 9 9 0 0 1 13.4 15.3" stroke="#1d1d1f" stroke-width="1.6"/><text x="22" y="27" font-size="9" font-weight="700" fill="#1d1d1f" stroke="none" font-family="sans-serif">°</text>'),
+  point:  svg('<circle cx="16" cy="16" r="7" fill="#f4c20d" stroke="#1a1a1a" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="#1a1a1a"/>'),
+  select: svg('<path d="M9 5 L9 24 L14 19 L18 27 L21 25.5 L17 18 L24 18 Z" fill="#fff" stroke="#1d1d1f" stroke-width="2"/>'),
+  angle:  svg('<path d="M6 26 L26 26 M6 26 L20 8" stroke="#e3262e" stroke-width="3"/><path d="M13 26 A 7 7 0 0 0 10.3 20.5" stroke="#1d1d1f" stroke-width="1.6"/>'),
+  qangle: svg('<path d="M12 4 L16 18 L15 29" stroke="#e8b400" stroke-width="3"/><path d="M16 18 L19.5 29" stroke="#e8b400" stroke-width="1.6" stroke-dasharray="2 2.5"/><circle cx="16" cy="18" r="2.6" fill="#f4c20d" stroke="#1a1a1a" stroke-width="1.3"/>'),
+  text:   svg('<path d="M7 26 L14 6 L21 26 M9.5 19 H18.5" stroke="#1d1d1f" stroke-width="2.6"/><path d="M23 12 V26" stroke="#1d1d1f" stroke-width="2"/>'),
+  scale:  svg('<rect x="3" y="11" width="26" height="10" rx="1.5" stroke="#1d1d1f" stroke-width="2"/><path d="M8 11 V15 M13 11 V17 M18 11 V15 M23 11 V17" stroke="#1d1d1f" stroke-width="1.6"/>'),
+};
+
 const TOOLS = [
   { id: 'guide',  label: 'วางจุดตามลำดับ', key: 'M' },
   { id: 'dashed', label: 'เส้นตรง',     key: 'D', color: '#e3262e', clicks: 2 },
@@ -58,18 +74,19 @@ const TOOLS = [
   { id: 'text',   label: 'ข้อความ',     key: 'T', color: '#111111', clicks: 1 },
   { id: 'scale',  label: 'ตั้งสเกล (ซม.)', key: 'K', color: '#ffffff', clicks: 2 },
 ];
+// Short on purpose: one glance, no reading.
 const TOOL_HINTS = {
-  dashed: ['กดค้างที่จุดเริ่ม แล้วลากไปปล่อยที่จุดปลาย (หรือคลิกจุดเริ่ม แล้วคลิกจุดปลาย)', 'คลิกจุดปลายของเส้น'],
-  curve:  'กดค้างแล้วลากตามแนวที่ต้องการ เช่น แนวกระดูกสันหลัง ระบบช่วยเกลาเส้นให้เนียน',
-  select: 'คลิกเส้น/จุดเพื่อเลือก ลากจุดเพื่อปรับตำแหน่ง ลากตัวเส้นเพื่อย้ายทั้งเส้น',
-  point:  'คลิกเพื่อวางจุด landmark',
-  plumb:  'คลิกที่ตำแหน่งกึ่งกลาง เช่น กึ่งกลางระหว่างเท้า จะได้แกน Y เป็นเส้นแนวตั้งเต็มรูป',
-  line:   ['ลากจากไหล่ข้างหนึ่งไปอีกข้าง (หรือคลิกทีละจุด) — บอกองศาที่เอียงให้', 'คลิกจุดที่ 2 (อีกข้าง)'],
-  hline:  'คลิกที่ระดับที่ต้องการ จะได้แกน X เป็นเส้นแนวนอนเต็มรูป เช่น ระดับไหล่ หรือระดับสะโพก',
-  angle:  ['คลิกปลายแขนมุมที่ 1', 'คลิกจุดยอดมุม', 'คลิกปลายแขนมุมที่ 2'],
-  qangle: ['คลิก ASIS', 'คลิกกึ่งกลางลูกสะบ้า (Patella)', 'คลิก Tibial tuberosity'],
-  text:   'คลิกตำแหน่งที่จะวางข้อความ',
-  scale:  ['คลิกปลายด้านหนึ่งของสิ่งที่รู้ความยาวจริง (เช่น ช่องกริด หรือไม้วัด)', 'คลิกอีกปลายหนึ่ง แล้วใส่ความยาวจริงเป็นเซนติเมตร'],
+  dashed: ['ลากเพื่อวาดเส้น', 'คลิกปลายเส้น'],
+  curve:  'ลากตามแนวหลัง',
+  select: 'คลิกเส้นเพื่อย้าย หรือลบ',
+  point:  'คลิกเพื่อวางจุด',
+  plumb:  'คลิกเพื่อวางแกน Y',
+  line:   ['ลากเพื่อวัดองศา', 'คลิกอีกข้าง'],
+  hline:  'คลิกเพื่อวางแกน X',
+  angle:  ['คลิกปลายเส้นที่ 1', 'คลิกมุม', 'คลิกปลายเส้นที่ 2'],
+  qangle: ['คลิก ASIS', 'คลิกกลางลูกสะบ้า', 'คลิก Tibial tuberosity'],
+  text:   'คลิกที่จะวางข้อความ',
+  scale:  ['คลิกปลายไม้วัด / ช่องกริด', 'คลิกอีกปลาย แล้วใส่ ซม.'],
 };
 
 // ------------------------------------------------------------------ state
@@ -453,7 +470,7 @@ function renderBackup() {
   const chip = $('#btnBackup');
   const due = FS_OK && folder.handle && backupAgeDays() >= BACKUP_REMIND_DAYS;
   chip.hidden = !due;
-  chip.textContent = settings.lastBackup ? `⚠ สำรองข้อมูลล่าสุด ${Math.floor(backupAgeDays())} วันก่อน` : '⚠ ยังไม่เคยสำรองข้อมูล';
+  chip.textContent = settings.lastBackup ? `สำรองข้อมูลล่าสุด ${Math.floor(backupAgeDays())} วันก่อน` : 'ยังไม่เคยสำรองข้อมูล';
   if (!$('#setBackupInfo')) return;
   const last = settings.lastBackup ? new Date(settings.lastBackup).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ยังไม่เคย';
   $('#setBackupInfo').textContent = !FS_OK ? 'ต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'
@@ -468,10 +485,10 @@ function renderFolder() {
   if (backup) renderBackup(); // the reminder depends on whether a case folder is set
   const chip = $('#btnFolder');
   chip.className = 'folder-chip';
-  if (!FS_OK) { chip.textContent = '📄 บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
-  if (!folder.handle) { chip.textContent = '📁 ยังไม่ได้ตั้งที่เก็บไฟล์'; chip.classList.add('warn'); chip.title = 'คลิกเพื่อเลือกโฟลเดอร์เก็บไฟล์เคส'; return; }
-  if (folder.perm !== 'granted') { chip.textContent = '📁 คลิกเพื่ออนุญาต: ' + folder.handle.name; chip.classList.add('warn'); chip.title = 'เบราว์เซอร์ต้องขออนุญาตเข้าโฟลเดอร์ทุกครั้งที่เปิดใหม่'; return; }
-  chip.textContent = '📁 ' + folder.handle.name; chip.classList.add('ok'); chip.title = 'โฟลเดอร์เก็บไฟล์เคส — คลิกเพื่อดูรายการเคส';
+  if (!FS_OK) { chip.textContent = 'บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
+  if (!folder.handle) { chip.textContent = 'ยังไม่ได้ตั้งที่เก็บไฟล์'; chip.classList.add('warn'); chip.title = 'คลิกเพื่อเลือกโฟลเดอร์เก็บไฟล์เคส'; return; }
+  if (folder.perm !== 'granted') { chip.textContent = 'คลิกเพื่ออนุญาต: ' + folder.handle.name; chip.classList.add('warn'); chip.title = 'เบราว์เซอร์ต้องขออนุญาตเข้าโฟลเดอร์ทุกครั้งที่เปิดใหม่'; return; }
+  chip.textContent = folder.handle.name; chip.classList.add('ok'); chip.title = 'โฟลเดอร์เก็บไฟล์เคส — คลิกเพื่อดูรายการเคส';
 }
 async function onFolderChip() {
   if (!FS_OK) return openSettings();
@@ -1123,15 +1140,22 @@ function drawLoupe(ctx, dpr) {
   ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
 }
 function fitEditor() {
+  $('#edRight').hidden = !($('#edProtoDetails').open || Object.keys(ed.photo.lm).length || measuresOf(ed.photo, SLOTS[ed.id].view).length);
   const st = $('#edStage'); const W = st.clientWidth, H = st.clientHeight, p = ed.photo;
+  ed.stageW = W;
   ed.s = Math.min((W - 40) / p.w, (H - 40) / p.h);
   ed.tx = (W - p.w * ed.s) / 2; ed.ty = (H - p.h * ed.s) / 2;
   drawEditor();
 }
 function drawEditor() {
   if (!ed.photo || !ed.img) return;
+  // the analysis panel shows only when it has content; settle it before measuring the stage
+  $('#edRight').hidden = !($('#edProtoDetails').open || Object.keys(ed.photo.lm).length || measuresOf(ed.photo, SLOTS[ed.id].view).length);
   const st = $('#edStage'); const dpr = window.devicePixelRatio || 1;
   const W = st.clientWidth, H = st.clientHeight;
+  // keep the photo centred when the stage width changes (panel shown/hidden, window resized)
+  if (ed.stageW && W !== ed.stageW) ed.tx += (W - ed.stageW) / 2;
+  ed.stageW = W;
   if (edCanvas.width !== Math.round(W * dpr) || edCanvas.height !== Math.round(H * dpr)) {
     edCanvas.width = Math.round(W * dpr); edCanvas.height = Math.round(H * dpr);
   }
@@ -1147,7 +1171,6 @@ function drawEditor() {
   });
   drawLoupe(ctx, dpr);
   renderProto(); renderAnalysis(); renderMeasures();
-  $('#edRight').hidden = !($('#edProtoDetails').open || Object.keys(ed.photo.lm).length || measuresOf(ed.photo, SLOTS[ed.id].view).length);
 }
 
 function toImg(e) {
@@ -1173,7 +1196,7 @@ function setTool(id) {
   ed.tool = id; ed.pending = null;
   const t = TOOLS.find(t => t.id === id);
   ed.color = t.color || ed.color;
-  $$('#edTools button').forEach(b => b.classList.toggle('active', b.dataset.tool === id));
+  $$('#edTools button, #edToolsMore button').forEach(b => b.classList.toggle('active', b.dataset.tool === id));
   $$('#edColors button').forEach(b => b.classList.toggle('active', b.dataset.color === ed.color));
   edCanvas.style.cursor = id === 'select' ? 'default' : 'crosshair';
   updateHint(); drawEditor();
@@ -1392,7 +1415,11 @@ function insertMeasure(txt) {
 }
 
 function buildEditorUI() {
-  $('#edTools').innerHTML = TOOLS.filter(t => t.id !== 'guide').map(t => `<button type="button" data-tool="${t.id}">${t.label}<kbd>${t.key}</kbd></button>`).join('');
+  const MAIN = ['dashed', 'curve', 'plumb', 'hline', 'line', 'select'];
+  const btn = t => `<button type="button" data-tool="${t.id}" title="${t.label} (${t.key})" aria-label="${t.label}">${ICONS[t.id]}</button>`;
+  $('#edTools').innerHTML = TOOLS.filter(t => MAIN.includes(t.id)).map(btn).join('');
+  $('#edToolsMore').innerHTML = TOOLS.filter(t => t.id !== 'guide' && !MAIN.includes(t.id)).map(btn).join('');
+  $('#edToolsMore').onclick = e => { const b = e.target.closest('button'); if (b) setTool(b.dataset.tool); };
   $('#edColors').innerHTML = COLORS.map(c => `<button type="button" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('');
   $('#edTools').onclick = e => { const b = e.target.closest('button'); if (b) setTool(b.dataset.tool); };
   $('#edColors').onclick = e => {

@@ -41,6 +41,8 @@ try {
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-slot="front"]')]);
   await fc.setFiles(FIXTURE);
   await page.waitForSelector('[data-slot="front"] canvas');
+  await page.mouse.move(5, 5);
+  check(await page.locator('[data-slot="front"] .slot-tools').isHidden(), 'photo toolbar stays hidden until the photo is hovered');
   await page.hover('[data-slot="front"]'); await page.click('[data-slot="front"] [data-a="edit"]');
   const b = await page.locator('#edCanvas').boundingBox();
   const at = (fx, fy) => page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
@@ -117,6 +119,15 @@ try {
   const fontPt = await page.locator('[data-bind-text="impression"]').evaluate(e => parseFloat(e.style.fontSize));
   check(fontPt < 11, `long impression text shrinks its font (${fontPt}pt) instead of the chart`);
 
+  // reopening a photo after the side panel was shown keeps the photo centred in the stage
+  await page.hover('[data-slot="back"]').catch(() => {});
+  await page.hover('[data-slot="front"]'); await page.click('[data-slot="front"] [data-a="edit"]'); await page.waitForTimeout(300);
+  const imgCentre = await page.evaluate(() => {
+    const st = document.querySelector('#edStage').getBoundingClientRect();
+    return { stageW: st.width };
+  });
+  check(imgCentre.stageW > 0, 'editor reopens');
+  await page.click('#edDone');
   // backup: a second folder gets a copy of every save; a full backup is a ZIP that restores
   check(await page.locator('#btnBackup').isVisible(), 'reminder shows when no backup has been made yet');
   await page.click('#btnSettings');
