@@ -52,15 +52,33 @@ try {
   for (const [x, y] of [[288, 120], [312, 120], [240, 190], [360, 200], [262, 420], [338, 420],
                         [272, 610], [328, 610], [271, 650], [329, 650], [268, 735], [334, 735]]) await px(x, y);
   check((await page.locator('#edProtoCount').innerText()) === '12/12', 'all 12 anterior landmarks placed in order');
+  // the last placed point stays selected: Shift+→ three times nudges it 30 screen px
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight');
   const analysis = await page.locator('#edAnalysis').innerText();
   check(analysis.includes('ไหล่ขวาสูงกว่าซ้าย') && analysis.includes('Q-angle'), 'automatic analysis lists findings with the patient side');
   const before = await page.locator('[data-findings="row1"] .finding').count();
   await page.click('#edInsert');
   check(await page.locator('[data-findings="row1"] .finding').count() > before, 'selected findings go into the report');
+  const readCase = () => page.evaluate(() => new Promise((res, rej) => {
+    const r = indexedDB.open('posture-analysis', 1);
+    r.onsuccess = () => { const g = r.result.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => res(JSON.parse(g.result)); g.onerror = rej; };
+  }));
   await page.keyboard.press('g'); await at(0.5, 0.9);
   await page.keyboard.press('l'); await at(0.42, 0.25); await at(0.58, 0.27);
   check((await page.locator('#edMeasures').innerText()).includes('ข้างขวาสูงกว่า'), 'free level line reports the patient side (front view is mirrored)');
   await page.click('#edDone');
+  await page.waitForTimeout(600);
+  const ankL = (await readCase()).photos.front.lm.ankL;
+  check(Math.abs(ankL[0] - (334 + 30 / sc)) < 0.5, `arrow keys nudge the selected landmark (x ${ankL[0].toFixed(1)})`);
+
+  // design-tool alignment: dragging the photo near the frame centre snaps the plumb line onto it
+  const sb = await page.locator('[data-slot="front"]').boundingBox();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2); await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width / 2 + 40, sb.y + sb.height / 2, { steps: 4 });
+  check(await page.locator('[data-slot="front"].dragging').count() === 1 && !(await page.locator('[data-slot="front"] .gbadge').textContent()), 'centre guides show while dragging, no snap when off-centre');
+  await page.mouse.move(sb.x + sb.width / 2 + 3, sb.y + sb.height / 2, { steps: 4 });
+  check((await page.locator('[data-slot="front"] .gbadge').textContent()).includes('เส้นดิ่งอยู่กึ่งกลาง'), 'photo snaps so the plumb line sits on the frame centre');
+  await page.mouse.up();
 
   // case folder: choose, save, autosave, reopen from the list
   await page.click('#btnFolder');

@@ -808,6 +808,10 @@ function drawLandmarks(ctx, photo, protocolId, P, u, opts) {
   for (const pt of PROTOCOLS[protocolId].points) {
     const p = lm[pt.id]; if (!p) continue;
     const q = P(p);
+    if (opts.selectedLm === pt.id) { // selected: square handle, like a design tool
+      ctx.save(); ctx.strokeStyle = '#ff2fd6'; ctx.lineWidth = 1.8 * u;
+      ctx.strokeRect(q[0] - 9 * u, q[1] - 9 * u, 18 * u, 18 * u); ctx.restore();
+    }
     if (opts.current === pt.id) {
       ctx.save(); ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2 * u;
       ctx.beginPath(); ctx.arc(q[0], q[1], 8.5 * u, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -887,6 +891,10 @@ function renderSlot(id) {
     <button type="button" data-a="replace">เปลี่ยนรูป</button>
     <button type="button" data-a="remove">ลบ</button>`;
   el.append(tools);
+  // design-tool style alignment guides: frame centre lines, shown on hover and while dragging
+  const g = document.createElement('div'); g.className = 'slot-guides';
+  g.innerHTML = '<span class="gv"></span><span class="gh"></span><span class="gbadge"></span>';
+  el.append(g);
   drawSlot(id);
 }
 
@@ -943,14 +951,29 @@ function bindSlots() {
       el.setPointerCapture(e.pointerId);
       const tf = slotTransform(photo, el.clientWidth, el.clientHeight), s = tf.s;
       const start = { x: e.clientX, y: e.clientY, cx: (el.clientWidth / 2 - tf.tx) / s, cy: (el.clientHeight / 2 - tf.ty) / s };
+      // snap targets: the plumb line (the person's centre) first, then the photo's own centre
+      const plumb = plumbX(id);
+      const xTargets = [[plumb, 'เส้นดิ่งอยู่กึ่งกลาง'], [photo.w / 2, 'กึ่งกลางรูป']].filter(t => t[0] != null);
+      const SNAP = 8; // screen px
+      const guides = el.querySelector('.slot-guides');
+      el.classList.add('dragging');
       let moved = false;
       const move = ev => {
         const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
         if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-        photo.view.cx = start.cx - dx / s; photo.view.cy = start.cy - dy / s;
+        let cx = start.cx - dx / s, cy = start.cy - dy / s, xs = null, ys = false;
+        for (const [t, name] of xTargets) if (Math.abs(cx - t) * s < SNAP) { cx = t; xs = name; break; }
+        if (Math.abs(cy - photo.h / 2) * s < SNAP) { cy = photo.h / 2; ys = true; }
+        photo.view.cx = cx; photo.view.cy = cy;
+        guides.classList.toggle('snap-x', !!xs); guides.classList.toggle('snap-y', ys);
+        guides.querySelector('.gbadge').textContent = xs ? xs + ' ✓' : '';
         drawSlot(id);
       };
-      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); if (moved) changed(); };
+      const up = () => {
+        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
+        el.classList.remove('dragging'); guides.classList.remove('snap-x', 'snap-y');
+        if (moved) changed();
+      };
       el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
     });
 
@@ -1100,7 +1123,7 @@ function drawEditor() {
   drawPhoto(ctx, ed.photo, ed.img, tf, 1.25 * dpr, {
     selected: ed.selected, pending: ed.pending, cursor, editor: true,
     analysis: analyze(ed.photo, ed.protoId), protocol: ed.protoId,
-    names: $('#edShowNames').checked, current: ed.tool === 'guide' ? ed.cur : ed.selLm,
+    names: $('#edShowNames').checked, current: ed.tool === 'guide' ? ed.cur : null, selectedLm: ed.selLm,
   });
   drawLoupe(ctx, dpr);
   renderProto(); renderAnalysis(); renderMeasures();
@@ -1140,7 +1163,7 @@ function updateHint() {
     const pts = protoPoints(), i = pts.findIndex(p => p.id === ed.cur), p = pts[i];
     $('#edHint').innerHTML = p
       ? `<b>${i + 1}/${pts.length} ${esc(p.name)}</b><br>${esc(p.hint)}${ed.photo.lm[p.id] ? '<br><small>วางแล้ว — คลิกใหม่เพื่อย้าย หรือลากจุดเดิม</small>' : ''}`
-      : 'วางครบทุกจุดแล้ว — ลากจุดเพื่อปรับ หรือเลือกจุดจากรายการเพื่อวางใหม่';
+      : 'วางครบทุกจุดแล้ว — คลิกจุดเพื่อเลือก แล้วลาก หรือกดลูกศรเพื่อขยับละเอียด (Shift = ทีละ 10)';
     return;
   }
   const h = TOOL_HINTS[ed.tool];
@@ -1217,7 +1240,8 @@ function edPointerDown(e) {
 function placePoint(img) {
   if (ed.tool === 'guide') {
     if (!ed.cur) return;
-    snapshot(); ed.photo.lm[ed.cur] = img; ed.selLm = null;
+    const placed = ed.cur;
+    snapshot(); ed.photo.lm[placed] = img; ed.selLm = placed; // arrows can fine-tune it right away
     const next = nextMissing(ed.cur);
     if (next) ed.cur = next;
     else { ed.cur = null; toast('วางครบทุกจุดแล้ว — ตรวจผลวิเคราะห์ทางขวา'); }
@@ -1347,6 +1371,15 @@ function buildEditorUI() {
     if (e.target.matches('input, textarea, [contenteditable="true"]')) return;
     if (e.key === ' ') { ed.space = true; e.preventDefault(); return; }
     if (e.key === 'Tab') { e.preventDefault(); setTool('guide'); skipPoint(); return; }
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[e.key] && ed.selLm && ed.photo.lm[ed.selLm]) {
+      e.preventDefault();
+      // 1 screen pixel per press (Shift: 10), whatever the zoom
+      const step = (e.shiftKey ? 10 : 1) / ed.s, [ax, ay] = arrows[e.key], p = ed.photo.lm[ed.selLm];
+      if (!e.repeat) snapshot();
+      ed.photo.lm[ed.selLm] = [p[0] + ax * step, p[1] + ay * step];
+      drawEditor(); return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
     if (e.key === 'Escape') { if (ed.pending) { ed.pending = null; updateHint(); drawEditor(); } else closeEditor(); return; }
