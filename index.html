@@ -152,8 +152,24 @@
 <div id="editor" class="editor no-print" hidden>
   <aside class="ed-side">
     <div class="ed-title" id="edTitle">แก้ไขรูป</div>
-    <div class="ed-group" id="edProtoWrap">
-      <div class="ed-label-row"><span class="ed-label">จุด Landmark <span id="edProtoCount"></span></span>
+    <div class="ed-group">
+      <div class="ed-label">เครื่องมือ</div>
+      <div class="ed-tools" id="edTools"></div>
+    </div>
+    <div class="ed-group">
+      <div class="ed-label">สี</div>
+      <div class="ed-colors" id="edColors"></div>
+      <label class="ed-width">ความหนาเส้น <input type="range" id="edWidth" min="0.6" max="3" step="0.2" value="1.2"></label>
+    </div>
+    <div class="ed-hint" id="edHint"></div>
+    <div class="ed-group ed-row">
+      <button type="button" id="edUndo" title="Ctrl+Z">ย้อนกลับ</button>
+      <button type="button" id="edDelete" title="Delete">ลบที่เลือก</button>
+      <button type="button" id="edClear">ล้างเส้นทั้งหมด</button>
+    </div>
+    <details class="ed-group ed-advanced" id="edProtoDetails">
+      <summary>จุด Landmark และวิเคราะห์อัตโนมัติ <small>(ไม่บังคับ)</small></summary>
+      <div class="ed-label-row"><span class="ed-label">จุด <span id="edProtoCount"></span></span>
         <label class="ed-toggle"><input type="checkbox" id="edShowNames" checked> แสดงชื่อจุด</label></div>
       <ol class="ed-proto" id="edProto"></ol>
       <div class="ed-row">
@@ -161,23 +177,11 @@
         <button type="button" id="edRemovePt">ลบจุดนี้</button>
         <button type="button" id="edResetPts">เริ่มใหม่</button>
       </div>
-    </div>
-    <div class="ed-hint" id="edHint"></div>
-    <details class="ed-group" id="edFree">
-      <summary class="ed-label">เครื่องมืออิสระ (เส้น มุม ข้อความ สเกล)</summary>
-      <div class="ed-tools" id="edTools"></div>
-      <div class="ed-label" style="margin-top:8px">สี</div>
-      <div class="ed-colors" id="edColors"></div>
     </details>
-    <div class="ed-group ed-row">
-      <button type="button" id="edUndo" title="Ctrl+Z">ย้อนกลับ</button>
-      <button type="button" id="edDelete" title="Delete">ลบที่เลือก</button>
-      <button type="button" id="edClear">ล้างเส้นอิสระ</button>
-    </div>
     <div class="ed-help">
-      คลิก = วางจุด · กดค้างแล้วลาก = เลื่อนภาพ · ลูกกลิ้ง = ซูม<br>
-      แก้จุด: คลิกเลือก แล้วลาก หรือกดลูกศร ←↑→↓ (Shift = ทีละ 10)<br>
-      Tab = ข้ามจุด · Delete = ลบจุดที่เลือก · Esc = ปิด
+      กดค้างแล้วลาก = ลากเส้น (ใช้ปากกา Wacom ได้)<br>
+      ย้าย/ลบเส้น: เลือก "เลือก/ย้าย" แล้วคลิกเส้น<br>
+      ลูกกลิ้ง = ซูม · Space ค้าง + ลาก หรือคลิกขวาลาก = เลื่อนภาพ
     </div>
     <div class="ed-group ed-row ed-bottom">
       <button type="button" id="edFit">พอดีจอ</button>
@@ -185,7 +189,7 @@
     </div>
   </aside>
   <div class="ed-stage" id="edStage"><canvas id="edCanvas"></canvas></div>
-  <aside class="ed-side ed-right">
+  <aside class="ed-side ed-right" id="edRight" hidden>
     <div class="ed-title">ผลวิเคราะห์</div>
     <div class="ed-scale" id="edScaleInfo"></div>
     <div id="edAnalysis" class="ed-analysis"></div>

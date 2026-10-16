@@ -46,22 +46,24 @@ const { PROTOCOLS, analyze } = window.PostureProtocol;
 
 const TOOLS = [
   { id: 'guide',  label: 'วางจุดตามลำดับ', key: 'M' },
-  { id: 'select', label: 'เลือก/ย้าย', key: 'V' },
-  { id: 'point',  label: 'จุด',        key: 'P', color: '#f4c20d', clicks: 1 },
+  { id: 'dashed', label: 'เส้นตรง',     key: 'D', color: '#e3262e', clicks: 2 },
+  { id: 'curve',  label: 'เส้นโค้ง',     key: 'C', color: '#f4c20d' },
   { id: 'plumb',  label: 'เส้นดิ่ง',    key: 'G', color: '#2dbd3a', clicks: 1 },
-  { id: 'line',   label: 'เส้นระดับ',   key: 'L', color: '#e3262e', clicks: 2 },
-  { id: 'dashed', label: 'เส้นตรง',     key: 'D', color: '#f4c20d', clicks: 2 },
+  { id: 'line',   label: 'เส้นระดับ (องศา)', key: 'L', color: '#e3262e', clicks: 2 },
+  { id: 'point',  label: 'จุด',        key: 'P', color: '#f4c20d', clicks: 1 },
+  { id: 'select', label: 'เลือก/ย้าย', key: 'V' },
   { id: 'angle',  label: 'มุม',         key: 'A', color: '#e3262e', clicks: 3 },
   { id: 'qangle', label: 'Q-angle',     key: 'Q', color: '#f4c20d', clicks: 3 },
   { id: 'text',   label: 'ข้อความ',     key: 'T', color: '#111111', clicks: 1 },
   { id: 'scale',  label: 'ตั้งสเกล (ซม.)', key: 'K', color: '#ffffff', clicks: 2 },
 ];
 const TOOL_HINTS = {
+  dashed: ['กดค้างที่จุดเริ่ม แล้วลากไปปล่อยที่จุดปลาย (หรือคลิกจุดเริ่ม แล้วคลิกจุดปลาย)', 'คลิกจุดปลายของเส้น'],
+  curve:  'กดค้างแล้วลากตามแนวที่ต้องการ เช่น แนวกระดูกสันหลัง ระบบช่วยเกลาเส้นให้เนียน',
   select: 'คลิกเส้น/จุดเพื่อเลือก ลากจุดเพื่อปรับตำแหน่ง ลากตัวเส้นเพื่อย้ายทั้งเส้น',
   point:  'คลิกเพื่อวางจุด landmark',
   plumb:  'คลิกที่ตาตุ่ม/กึ่งกลางฐาน เพื่อวางเส้นดิ่ง (แนวตั้ง)',
-  line:   ['คลิกจุดที่ 1 (เช่น ไหล่ข้างหนึ่ง)', 'คลิกจุดที่ 2 (อีกข้าง)'],
-  dashed: ['คลิกจุดเริ่มต้น', 'คลิกจุดปลาย'],
+  line:   ['ลากจากไหล่ข้างหนึ่งไปอีกข้าง (หรือคลิกทีละจุด) — แสดงมุมเอียงให้', 'คลิกจุดที่ 2 (อีกข้าง)'],
   angle:  ['คลิกปลายแขนมุมที่ 1', 'คลิกจุดยอดมุม', 'คลิกปลายแขนมุมที่ 2'],
   qangle: ['คลิก ASIS', 'คลิกกึ่งกลางลูกสะบ้า (Patella)', 'คลิก Tibial tuberosity'],
   text:   'คลิกตำแหน่งที่จะวางข้อความ',
@@ -706,7 +708,8 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = sh.color; ctx.fillStyle = sh.color;
-    ctx.lineWidth = 2.2 * u;
+    const lw = sh.w || 1; // thickness chosen when drawn
+    ctx.lineWidth = 2.2 * u * lw;
     if (sel) { ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 8 * u; }
     const pts = sh.pts.map(P);
 
@@ -726,10 +729,18 @@ function drawPhoto(ctx, photo, img, tf, u, opts = {}) {
         }
         break;
       }
+      case 'curve': { // freehand stroke, smoothed through the midpoints
+        ctx.lineWidth = 2.6 * u * lw;
+        ctx.beginPath(); ctx.moveTo(...pts[0]);
+        for (let i = 1; i < pts.length - 1; i++) ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+        ctx.lineTo(...pts[pts.length - 1]); ctx.stroke();
+        break;
+      }
       case 'dashed': // drawn solid now; the id is kept so saved cases still open
-        ctx.lineWidth = 2.6 * u;
+        ctx.lineWidth = 2.6 * u * lw;
         ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.stroke();
-        landmark(ctx, pts[0], u, '#f4c20d'); landmark(ctx, pts[1], u, '#f4c20d'); break;
+        if (sel && opts.editor) { landmark(ctx, pts[0], u, '#f4c20d'); landmark(ctx, pts[1], u, '#f4c20d'); } // drag handles, never printed
+        break;
       case 'angle': case 'qangle': {
         const [a, v, b] = pts;
         ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...v); ctx.lineTo(...b); ctx.stroke();
@@ -991,7 +1002,7 @@ function bindSlots() {
 
 const ed = {
   id: null, photo: null, img: null,
-  tool: 'select', color: null,
+  tool: 'dashed', color: null, width: 1.2,
   s: 1, tx: 0, ty: 0,           // image -> screen (CSS px)
   pending: null, cursor: null,
   selected: -1, drag: null, pan: null, space: false,
@@ -1005,9 +1016,11 @@ function openEditor(id) {
   ed.history = []; ed.selected = -1; ed.selLm = null; ed.pending = null; ed.plumbAtOpen = plumbX(id);
   ed.cur = nextMissing(null);
   $('#edTitle').textContent = 'วางจุด/เส้น — ' + SLOTS[id].label;
+  // the landmark section stays folded unless this photo already uses landmarks
+  $('#edProtoDetails').open = Object.keys(ed.photo.lm).length > 0;
   $('#editor').hidden = false;
   document.body.style.overflow = 'hidden';
-  loadImage(ed.photo.src).then(img => { ed.img = img; fitEditor(); setTool(ed.cur ? 'guide' : 'select'); });
+  loadImage(ed.photo.src).then(img => { ed.img = img; fitEditor(); setTool(ed.tool === 'guide' && !$('#edProtoDetails').open ? 'dashed' : ed.tool); });
 }
 function closeEditor() {
   $('#editor').hidden = true; document.body.style.overflow = '';
@@ -1084,7 +1097,7 @@ function insertAnalysis() {
 
 // ---- magnifier: a 3× view under the cursor while placing points
 function drawLoupe(ctx, dpr) {
-  if (!ed.cursor || ed.tool === 'select' || ed.pan || ed.drag) return;
+  if (!ed.cursor || ed.tool === 'select' || ed.tool === 'curve' || ed.stroke || ed.pan || ed.drag) return;
   const [cx, cy] = [ed.cursor[0] * dpr, ed.cursor[1] * dpr], R = 70 * dpr, Z = 3, gap = 26 * dpr;
   let lx = cx - R - gap, ly = cy - R - gap;
   if (lx - R < 0) lx = cx + R + gap;
@@ -1127,6 +1140,7 @@ function drawEditor() {
   });
   drawLoupe(ctx, dpr);
   renderProto(); renderAnalysis(); renderMeasures();
+  $('#edRight').hidden = !($('#edProtoDetails').open || Object.keys(ed.photo.lm).length || measuresOf(ed.photo, SLOTS[ed.id].view).length);
 }
 
 function toImg(e) {
@@ -1152,7 +1166,6 @@ function setTool(id) {
   ed.tool = id; ed.pending = null;
   const t = TOOLS.find(t => t.id === id);
   ed.color = t.color || ed.color;
-  if (id !== 'guide' && id !== 'select') $('#edFree').open = true;
   $$('#edTools button').forEach(b => b.classList.toggle('active', b.dataset.tool === id));
   $$('#edColors button').forEach(b => b.classList.toggle('active', b.dataset.color === ed.color));
   edCanvas.style.cursor = id === 'select' ? 'default' : 'crosshair';
@@ -1182,6 +1195,7 @@ function hitLandmark(sp) {
 function hitHandle(sp) {
   const shapes = ed.photo.shapes;
   for (let i = shapes.length - 1; i >= 0; i--) {
+    if (shapes[i].type === 'curve') continue;
     const pts = shapes[i].pts;
     for (let j = 0; j < pts.length; j++) {
       const q = toScreen(pts[j]); if (Math.hypot(q[0] - sp[0], q[1] - sp[1]) < 9) return { i, j };
@@ -1230,11 +1244,27 @@ function edPointerDown(e) {
     if (h) { snapshot(); ed.selected = h.i; ed.drag = { kind: 'handle', ...h }; drawEditor(); return; }
     const b = hitBody(screen);
     ed.selected = b;
+    if (b >= 0) {
+      const sh = ed.photo.shapes[b]; ed.color = sh.color; ed.width = sh.w || 1;
+      $('#edWidth').value = ed.width; $$('#edColors button').forEach(x => x.classList.toggle('active', x.dataset.color === ed.color));
+    }
     if (b >= 0) { snapshot(); ed.drag = { kind: 'body', i: b, last: img }; }
     else ed.press = { x: e.clientX, y: e.clientY, tx: ed.tx, ty: ed.ty, img: null }; // empty space: drag to pan
     drawEditor(); return;
   }
-  // drawing tools: decide on release — a click places a point, a drag pans the photo
+  if (ed.tool === 'curve') {
+    snapshot();
+    ed.stroke = { type: 'curve', color: ed.color, w: ed.width, pts: [img] }; ed.smooth = img;
+    ed.photo.shapes.push(ed.stroke); drawEditor(); return;
+  }
+  const t = TOOLS.find(t => t.id === ed.tool);
+  if (t.clicks === 2 && !ed.pending) {
+    // two-point lines: press = start; release after a drag = end (like drawing a line in Word)
+    ed.pending = { type: t.id, color: ed.color, w: ed.width, pts: [img] };
+    ed.lineDrag = { x: e.clientX, y: e.clientY };
+    updateHint(); drawEditor(); return;
+  }
+  // other tools: decide on release — a click places a point, a drag pans the photo
   ed.press = { x: e.clientX, y: e.clientY, tx: ed.tx, ty: ed.ty, img };
 }
 function placePoint(img) {
@@ -1248,7 +1278,7 @@ function placePoint(img) {
     updateHint(); drawEditor(); return;
   }
   const t = TOOLS.find(t => t.id === ed.tool);
-  if (!ed.pending) ed.pending = { type: t.id, color: ed.color, pts: [] };
+  if (!ed.pending) ed.pending = { type: t.id, color: ed.color, w: ed.width, pts: [] };
   ed.pending.pts.push(img);
   if (ed.pending.pts.length >= t.clicks) {
     const sh = ed.pending; ed.pending = null;
@@ -1262,13 +1292,23 @@ function placePoint(img) {
       if (cm > 0 && px > 0) { snapshot(); ed.photo.scale = { a: sh.pts[0], b: sh.pts[1], cm, pxPerCm: px / cm }; toast(`ตั้งสเกลแล้ว: ${cm} ซม.`); }
       setTool('select'); return;
     }
-    snapshot(); ed.photo.shapes.push(sh); ed.selected = ed.photo.shapes.length - 1;
+    snapshot(); ed.photo.shapes.push(sh); ed.selected = -1;
   }
   updateHint(); drawEditor();
 }
 function edPointerMove(e) {
   if (!ed.photo) return;
   const { screen, img } = toImg(e);
+  if (ed.stroke) {
+    // pen/mouse stroke: every sampled point, lightly stabilised to iron out hand jitter
+    for (const ev of (e.getCoalescedEvents?.() || []).length ? e.getCoalescedEvents() : [e]) {
+      const raw = toImg(ev).img; ed.rawEnd = raw;
+      ed.smooth = [ed.smooth[0] + (raw[0] - ed.smooth[0]) * 0.45, ed.smooth[1] + (raw[1] - ed.smooth[1]) * 0.45];
+      const last = ed.stroke.pts[ed.stroke.pts.length - 1];
+      if (Math.hypot(ed.smooth[0] - last[0], ed.smooth[1] - last[1]) * ed.s > 2) ed.stroke.pts.push(ed.smooth);
+    }
+    drawEditor(); return;
+  }
   if (ed.press && !ed.pan && Math.hypot(e.clientX - ed.press.x, e.clientY - ed.press.y) > 4) {
     ed.pan = ed.press; ed.press = null; edCanvas.style.cursor = 'grabbing';
   }
@@ -1284,7 +1324,19 @@ function edPointerMove(e) {
   if (ed.tool === 'guide') edCanvas.style.cursor = hitLandmark(screen) ? 'move' : 'crosshair';
   if (ed.tool !== 'select' || ed.pending) { ed.cursor = screen; drawEditor(); }
 }
-function edPointerUp() {
+function edPointerUp(e) {
+  if (ed.stroke) {
+    const st = ed.stroke; ed.stroke = null;
+    if (ed.rawEnd) st.pts.push(ed.rawEnd); ed.rawEnd = null;
+    if (st.pts.length < 3) { ed.photo.shapes.pop(); ed.history.pop(); } // a tap, not a stroke
+    drawEditor(); return;
+  }
+  if (ed.lineDrag) {
+    const d = ed.lineDrag; ed.lineDrag = null;
+    // dragged: finish the line at the release point; a plain click waits for the second click
+    if (e && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) placePoint(toImg(e).img);
+    return;
+  }
   if (ed.press) { const p = ed.press; ed.press = null; if (p.img) placePoint(p.img); }
   if (ed.pan) { ed.pan = null; edCanvas.style.cursor = ed.tool === 'select' ? 'default' : 'crosshair'; }
   if (ed.drag) { ed.drag = null; drawEditor(); }
@@ -1336,7 +1388,8 @@ function buildEditorUI() {
   $('#edColors').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     ed.color = b.dataset.color;
-    if (ed.selected >= 0) { snapshot(); ed.photo.shapes[ed.selected].color = ed.color; }
+    // while drawing, a colour is for the next line; in "select" it recolours the selected one
+    if (ed.tool === 'select' && ed.selected >= 0) { snapshot(); ed.photo.shapes[ed.selected].color = ed.color; }
     if (ed.pending) ed.pending.color = ed.color;
     $$('#edColors button').forEach(x => x.classList.toggle('active', x === b)); drawEditor();
   };
@@ -1345,9 +1398,19 @@ function buildEditorUI() {
   $('#edRemovePt').onclick = () => { const id = ed.selLm || ed.cur; if (id && ed.photo.lm[id]) { snapshot(); delete ed.photo.lm[id]; ed.cur = id; ed.selLm = null; setTool('guide'); } };
   $('#edResetPts').onclick = () => { if (Object.keys(ed.photo.lm).length && confirm('ลบจุด landmark ทั้งหมดของรูปนี้ แล้วเริ่มวางใหม่?')) { snapshot(); ed.photo.lm = {}; ed.cur = nextMissing(null); setTool('guide'); } };
   $('#edShowNames').onchange = drawEditor;
+  $('#edWidth').oninput = e => {
+    ed.width = +e.target.value;
+    if (ed.tool === 'select' && ed.selected >= 0) { ed.photo.shapes[ed.selected].w = ed.width; drawEditor(); }
+  };
+  $('#edProtoDetails').addEventListener('toggle', () => {
+    if (!ed.id) return;
+    if ($('#edProtoDetails').open) { ed.cur = nextMissing(null); setTool('guide'); }
+    else if (ed.tool === 'guide') setTool('dashed');
+    drawEditor();
+  });
   $('#edInsert').onclick = insertAnalysis;
   $('#edDelete').onclick = deleteSelected;
-  $('#edClear').onclick = () => { if (ed.photo.shapes.length && confirm('ลบเส้นและจุดที่วาดด้วยเครื่องมืออิสระทั้งหมด? (จุด landmark ยังอยู่)')) { snapshot(); ed.photo.shapes = []; ed.selected = -1; drawEditor(); } };
+  $('#edClear').onclick = () => { if (ed.photo.shapes.length && confirm('ลบเส้นที่วาดทั้งหมดในรูปนี้?')) { snapshot(); ed.photo.shapes = []; ed.selected = -1; drawEditor(); } };
   $('#edFit').onclick = fitEditor;
   $('#edDone').onclick = closeEditor;
 

@@ -44,8 +44,26 @@ try {
   await page.hover('[data-slot="front"]'); await page.click('[data-slot="front"] [data-a="edit"]');
   const b = await page.locator('#edCanvas').boundingBox();
   const at = (fx, fy) => page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
-  // guided landmarks: the editor opens on the first point of the anterior protocol
-  check((await page.locator('#edHint').innerText()).includes('1/12'), 'editor starts the guided landmark protocol');
+  const readCase = () => page.evaluate(() => new Promise((res, rej) => {
+    const r = indexedDB.open('posture-analysis', 1);
+    r.onsuccess = () => { const g = r.result.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => res(JSON.parse(g.result)); g.onerror = rej; };
+  }));
+  // simple drawing first: the editor opens on the straight-line tool; press-drag-release draws a line
+  check(await page.locator('#edTools [data-tool="dashed"].active').count() === 1, 'editor opens with the straight-line tool');
+  check(await page.locator('#edProtoDetails[open]').count() === 0 && await page.locator('#edRight').isHidden(), 'landmarks and analysis stay folded away');
+  const drag = async (pts) => {
+    await page.mouse.move(b.x + b.width * pts[0][0], b.y + b.height * pts[0][1]); await page.mouse.down();
+    for (const [fx, fy] of pts.slice(1)) await page.mouse.move(b.x + b.width * fx, b.y + b.height * fy, { steps: 6 });
+    await page.mouse.up();
+  };
+  await drag([[0.45, 0.3], [0.55, 0.3]]);
+  await page.keyboard.press('c');
+  await drag([[0.5, 0.25], [0.52, 0.35], [0.5, 0.45], [0.49, 0.55]]);
+  const shapes = async () => (await readCase()).photos.front.shapes;
+  // landmarks are opt-in
+  await page.click('#edProtoDetails summary');
+  await page.waitForFunction(() => document.querySelector('#edHint').textContent.includes('1/12'), null, { timeout: 3000 }).catch(() => {});
+  check((await page.locator('#edHint').innerText()).includes('1/12'), 'opening the landmark section starts the guided protocol');
   const W = 600, H = 800;
   const sc = Math.min((b.width - 40) / W, (b.height - 40) / H), ox = (b.width - W * sc) / 2, oy = (b.height - H * sc) / 2;
   const px = (x, y) => page.mouse.click(b.x + ox + x * sc, b.y + oy + y * sc);
@@ -59,15 +77,14 @@ try {
   const before = await page.locator('[data-findings="row1"] .finding').count();
   await page.click('#edInsert');
   check(await page.locator('[data-findings="row1"] .finding').count() > before, 'selected findings go into the report');
-  const readCase = () => page.evaluate(() => new Promise((res, rej) => {
-    const r = indexedDB.open('posture-analysis', 1);
-    r.onsuccess = () => { const g = r.result.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => res(JSON.parse(g.result)); g.onerror = rej; };
-  }));
   await page.keyboard.press('g'); await at(0.5, 0.9);
   await page.keyboard.press('l'); await at(0.42, 0.25); await at(0.58, 0.27);
   check((await page.locator('#edMeasures').innerText()).includes('ข้างขวาสูงกว่า'), 'free level line reports the patient side (front view is mirrored)');
   await page.click('#edDone');
   await page.waitForTimeout(600);
+  const sh = await shapes();
+  check(sh.some(x => x.type === 'dashed' && x.pts.length === 2), 'press-drag-release draws a straight line');
+  check(sh.some(x => x.type === 'curve' && x.pts.length > 5), 'freehand curve tool records a smooth stroke');
   const ankL = (await readCase()).photos.front.lm.ankL;
   check(Math.abs(ankL[0] - (334 + 30 / sc)) < 0.5, `arrow keys nudge the selected landmark (x ${ankL[0].toFixed(1)})`);
 
