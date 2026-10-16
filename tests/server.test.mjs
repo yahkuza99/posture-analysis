@@ -4,7 +4,7 @@
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -111,6 +111,26 @@ try {
   check(await c.locator('#setFolder').isDisabled() && await c.locator('#setBackupFolder').isDisabled(), 'no local folder pickers on the server');
   check((await c.locator('#setBackupInfo').textContent()).includes('ทุกคืน'), 'settings say the server backs up every night');
   check(await c.locator('#btnBackup').isHidden(), 'no "make a backup" reminder on the server');
+
+  // ---- a computer that does not trust the clinic certificate yet is offered the installer
+  check(await c.locator('#btnCert').isHidden(), 'no certificate button when the service worker registers');
+  {
+    const ctx = await browser.newContext({ acceptDownloads: true });
+    await ctx.addInitScript(() => {
+      navigator.serviceWorker.register = () => Promise.reject(new DOMException('An SSL certificate error occurred when fetching the script.', 'SecurityError'));
+    });
+    const p = await ctx.newPage();
+    await p.goto(BASE);
+    await p.waitForFunction(() => !document.querySelector('#btnCert').hidden, null, { timeout: 5000 }).catch(() => {});
+    check(await p.locator('#btnCert').isVisible(), 'certificate not trusted: "install clinic certificate" button shows');
+    // the deployment publishes download/install-ahg-cert.cmd (server/make_certs.py); stand one in
+    const dl = join(ROOT, 'download'), madeDir = !existsSync(dl), made = !existsSync(join(dl, 'install-ahg-cert.cmd'));
+    if (made) { mkdirSync(dl, { recursive: true }); writeFileSync(join(dl, 'install-ahg-cert.cmd'), '@echo off'); }
+    const [d] = await Promise.all([p.waitForEvent('download', { timeout: 5000 }).catch(() => null), p.click('#btnCert')]);
+    check(!!d && d.suggestedFilename() === 'install-ahg-cert.cmd' && !(await d.failure()), 'the button downloads the installer from the server');
+    if (made) rmSync(madeDir ? dl : join(dl, 'install-ahg-cert.cmd'), { recursive: true, force: true });
+    await ctx.close();
+  }
 
   // ---- nightly backup ZIP restores through the app
   const ZIPS = mkdtempSync(join(tmpdir(), 'posture-zips-')), MIRROR = join(ZIPS, 'mirror');

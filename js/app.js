@@ -491,6 +491,7 @@ function renderFolder() {
   if (backup) renderBackup(); // the reminder depends on whether a case folder is set
   const chip = $('#btnFolder');
   chip.className = 'folder-chip';
+  renderCertHint();
   if (SERVER) { chip.textContent = SERVER.name; chip.classList.add('ok'); chip.title = 'เคสทุกเครื่องเก็บรวมที่นี่ — คลิกเพื่อดูรายการเคส'; return; }
   if (!FS_OK) { chip.textContent = 'บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
   if (!folder.handle) { chip.textContent = 'ยังไม่ได้ตั้งที่เก็บไฟล์'; chip.classList.add('warn'); chip.title = 'คลิกเพื่อเลือกโฟลเดอร์เก็บไฟล์เคส'; return; }
@@ -1673,7 +1674,15 @@ function bindSettings() {
 
 // ------------------------------------------------------------------ offline app (service worker) & install
 
+let certUntrusted = false;
+function renderCertHint() { $('#btnCert').hidden = !(SERVER && certUntrusted); }
+function downloadCertInstaller() {
+  const a = document.createElement('a'); a.href = 'download/install-ahg-cert.cmd'; a.download = 'install-ahg-cert.cmd'; a.click();
+  toast('เปิดไฟล์ install-ahg-cert ที่โหลดมา กด Yes แล้วปิด Chrome ทุกหน้าต่าง เปิดใหม่ — ทำครั้งเดียวต่อเครื่อง', 10000);
+}
+
 function setupPWA() {
+  $('#btnCert').onclick = downloadCertInstaller;
   if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
   // Reload only when the user accepted an update; the very first install also fires
   // controllerchange (clients.claim) and must not reload a page someone is working in.
@@ -1695,7 +1704,12 @@ function setupPWA() {
       w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); });
     });
     setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
-  }).catch(() => { /* offline support unavailable; the app still works online */ });
+  }).catch(e => {
+    // offline support unavailable; the app still works online. On the clinic server this means
+    // the computer does not trust the clinic certificate yet (the user clicked past the warning):
+    // offer the one-click installer the server publishes.
+    if (e && e.name === 'SecurityError') { certUntrusted = true; renderCertHint(); }
+  });
 
   let deferred = null;
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('#btnInstall').hidden = false; });
