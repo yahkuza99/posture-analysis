@@ -287,8 +287,10 @@ class Handler(BaseHTTPRequestHandler):
         ctype = TYPES.get(ext) or mimetypes.guess_type(full)[0] or "application/octet-stream"
         with open(full, "rb") as fh:
             data = fh.read()
-        # the service worker keeps the offline copy; the browser cache must always revalidate
-        return self._send(200, data, ctype, headers={"Cache-Control": "no-cache"})
+        headers = {"Cache-Control": "no-cache"}   # the service worker keeps the offline copy
+        if parts[0] == "download":                # always save, never open in the tab
+            headers["Content-Disposition"] = 'attachment; filename="%s"' % parts[-1].replace('"', "")
+        return self._send(200, data, ctype, headers=headers)
 
 
 class Server(ThreadingHTTPServer):

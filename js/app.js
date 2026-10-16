@@ -1677,7 +1677,10 @@ function bindSettings() {
 let certUntrusted = false;
 function renderCertHint() { $('#btnCert').hidden = !(SERVER && certUntrusted); }
 function downloadCertInstaller() {
-  const a = document.createElement('a'); a.href = 'download/install-ahg-cert.cmd'; a.download = 'install-ahg-cert.cmd'; a.click();
+  // a hidden frame, not <a download>: Chrome cancels anchor downloads from a page whose
+  // certificate it does not trust yet — exactly the computers this button is for (measured)
+  const f = document.createElement('iframe'); f.hidden = true; f.src = 'download/install-ahg-cert.cmd';
+  document.body.append(f); setTimeout(() => f.remove(), 60000);
   toast('เปิดไฟล์ install-ahg-cert ที่โหลดมา กด Yes แล้วปิด Chrome ทุกหน้าต่าง เปิดใหม่ — ทำครั้งเดียวต่อเครื่อง', 10000);
 }
 
