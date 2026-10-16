@@ -251,10 +251,15 @@ async function leaveCurrentCase() {
 // Chrome/Edge on a computer can read and write a folder the user picks. Other browsers fall back
 // to downloading/opening .json files by hand.
 
-const FS_OK = 'showDirectoryPicker' in window;
+let FS_OK = 'showDirectoryPicker' in window;
 const folder = { handle: null, perm: 'none' };
+// Served by the clinic server (server/posture_server.py): cases live in one folder on that server
+// for every computer, through js/serverstore.js. null = the usual folder-on-this-computer mode.
+let SERVER = null;
 
 async function loadFolder() {
+  SERVER = window.PostureServer ? await window.PostureServer.detect() : null;
+  if (SERVER) { folder.handle = SERVER; folder.perm = 'granted'; FS_OK = true; return; }
   if (!FS_OK) return;
   try {
     folder.handle = (await idbGet('folder')) || null;
@@ -262,6 +267,7 @@ async function loadFolder() {
   } catch { folder.handle = null; }
 }
 async function chooseFolder() {
+  if (SERVER) { toast('เคสทุกเครื่องเก็บรวมที่' + SERVER.name + 'ให้อัตโนมัติ ไม่ต้องเลือกโฟลเดอร์'); return false; }
   if (!FS_OK) { toast('เลือกโฟลเดอร์ได้เฉพาะ Chrome หรือ Edge บนคอมพิวเตอร์'); return false; }
   try {
     const h = await window.showDirectoryPicker({ id: 'posture-cases', mode: 'readwrite', startIn: 'documents' });
@@ -345,13 +351,14 @@ const backup = { handle: null, perm: 'none' };
 const BACKUP_KEEP = 12, BACKUP_REMIND_DAYS = 7;
 
 async function loadBackupFolder() {
-  if (!FS_OK) return;
+  if (!FS_OK || SERVER) return;                // the clinic server backs itself up every night
   try {
     backup.handle = (await idbGet('backupFolder')) || null;
     if (backup.handle) backup.perm = await backup.handle.queryPermission({ mode: 'readwrite' });
   } catch { backup.handle = null; }
 }
 async function chooseBackupFolder() {
+  if (SERVER) { toast(SERVER.name + 'สำรองเคสทั้งหมดให้ทุกคืนอยู่แล้ว'); return false; }
   if (!FS_OK) { toast('เลือกโฟลเดอร์ได้เฉพาะ Chrome หรือ Edge บนคอมพิวเตอร์'); return false; }
   try {
     const h = await window.showDirectoryPicker({ id: 'posture-backup', mode: 'readwrite' });
@@ -465,23 +472,26 @@ function pickRestore() {
 function backupAgeDays() { return settings.lastBackup ? (Date.now() - new Date(settings.lastBackup)) / 86400000 : Infinity; }
 function renderBackup() {
   const chip = $('#btnBackup');
-  const due = FS_OK && folder.handle && backupAgeDays() >= BACKUP_REMIND_DAYS;
+  const due = !SERVER && FS_OK && folder.handle && backupAgeDays() >= BACKUP_REMIND_DAYS;
   chip.hidden = !due;
   chip.textContent = settings.lastBackup ? `สำรองข้อมูลล่าสุด ${Math.floor(backupAgeDays())} วันก่อน` : 'ยังไม่เคยสำรองข้อมูล';
   if (!$('#setBackupInfo')) return;
   const last = settings.lastBackup ? new Date(settings.lastBackup).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : 'ยังไม่เคย';
-  $('#setBackupInfo').textContent = !FS_OK ? 'ต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'
+  $('#setBackupInfo').textContent = SERVER ? `${SERVER.name}สำรองเคสทั้งหมดให้ทุกคืน · กด "สำรองทั้งหมดตอนนี้" เพื่อดาวน์โหลดไฟล์ ZIP เก็บเองเพิ่มได้`
+    : !FS_OK ? 'ต้องใช้ Chrome หรือ Edge บนคอมพิวเตอร์'
     : (backup.handle
       ? `โฟลเดอร์สำรอง "${backup.handle.name}"${backup.perm === 'granted' ? ' · คัดลอกทุกครั้งที่บันทึก' : ' (ต้องกดอนุญาตอีกครั้ง — กด "สำรองทั้งหมดตอนนี้")'}`
       : 'ยังไม่ได้เลือกโฟลเดอร์สำรอง — แนะนำฮาร์ดดิสก์ภายนอกหรือ NAS') + ` · สำรองทั้งหมดล่าสุด: ${last}`;
   $('#setBackupFolder').textContent = backup.handle ? 'เปลี่ยนโฟลเดอร์สำรอง' : 'เลือกโฟลเดอร์สำรอง';
   $('#setBackupFolder').disabled = $('#setBackupNow').disabled = !FS_OK;
+  if (SERVER) $('#setBackupFolder').disabled = true;
 }
 
 function renderFolder() {
   if (backup) renderBackup(); // the reminder depends on whether a case folder is set
   const chip = $('#btnFolder');
   chip.className = 'folder-chip';
+  if (SERVER) { chip.textContent = SERVER.name; chip.classList.add('ok'); chip.title = 'เคสทุกเครื่องเก็บรวมที่นี่ — คลิกเพื่อดูรายการเคส'; return; }
   if (!FS_OK) { chip.textContent = 'บันทึกเป็นไฟล์ดาวน์โหลด'; chip.title = 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ ใช้ Chrome หรือ Edge'; return; }
   if (!folder.handle) { chip.textContent = 'ยังไม่ได้ตั้งที่เก็บไฟล์'; chip.classList.add('warn'); chip.title = 'คลิกเพื่อเลือกโฟลเดอร์เก็บไฟล์เคส'; return; }
   if (folder.perm !== 'granted') { chip.textContent = 'คลิกเพื่ออนุญาต: ' + folder.handle.name; chip.classList.add('warn'); chip.title = 'เบราว์เซอร์ต้องขออนุญาตเข้าโฟลเดอร์ทุกครั้งที่เปิดใหม่'; return; }
@@ -1585,11 +1595,26 @@ function bindMuscle() {
 
 // ------------------------------------------------------------------ clinic settings (logo, default chart)
 // Kept in the browser only, separate from the case, so they never end up in the repository.
+// On the clinic server the logo and muscle chart are shared by every computer (therapist name
+// stays per computer).
 
 let settings = { logo: null, chart: null, therapist: '', lastBackup: null };
 async function saveSettings(patch) {
   Object.assign(settings, patch);
   try { await idbSet('settings', JSON.stringify(settings)); } catch { toast('บันทึกการตั้งค่าไม่ได้'); }
+  if (SERVER && ('logo' in patch || 'chart' in patch)) {
+    try { await window.PostureServer.putSettings({ logo: settings.logo, chart: settings.chart }); }
+    catch (e) { toast('บันทึกการตั้งค่าในเครื่องนี้แล้ว แต่ส่งไปเครื่องกลางไม่สำเร็จ: ' + e.message, 5000); }
+  }
+}
+async function loadSharedSettings() {
+  if (!SERVER) return;
+  const s = await window.PostureServer.getSettings();
+  let changed = false;
+  for (const k of ['logo', 'chart']) if (k in s && s[k] !== settings[k]) { settings[k] = s[k]; changed = true; }
+  if (!changed) return;
+  try { await idbSet('settings', JSON.stringify(settings)); } catch { /* shown from memory this session */ }
+  renderLogo();
 }
 function renderLogo() {
   $$('.logo-slot').forEach(slot => {
@@ -1617,11 +1642,12 @@ function pickLogo() {
 
 function openSettings() { renderSettings(); const d = $('#settingsDlg'); if (!d.open) d.showModal(); }
 function renderSettings() {
-  $('#setFolderInfo').textContent = !FS_OK ? 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ (ใช้ Chrome หรือ Edge) — ไฟล์เคสจะดาวน์โหลดไปที่โฟลเดอร์ Downloads'
+  $('#setFolderInfo').textContent = SERVER ? `${SERVER.name} · เคสจากทุกเครื่องในคลินิกบันทึกรวมที่นี่อัตโนมัติ`
+    : !FS_OK ? 'เบราว์เซอร์นี้เลือกโฟลเดอร์ไม่ได้ (ใช้ Chrome หรือ Edge) — ไฟล์เคสจะดาวน์โหลดไปที่โฟลเดอร์ Downloads'
     : folder.handle ? `โฟลเดอร์ "${folder.handle.name}"${folder.perm === 'granted' ? '' : ' (ต้องกดอนุญาตอีกครั้ง)'} · เคสบันทึกอัตโนมัติลงโฟลเดอร์นี้`
     : 'ยังไม่ได้เลือก — เลือกโฟลเดอร์ในเครื่อง (เช่น Documents/Posture Cases) เพื่อเก็บไฟล์เคสทั้งหมด';
   $('#setFolder').textContent = folder.handle ? 'เปลี่ยนโฟลเดอร์' : 'เลือกโฟลเดอร์';
-  $('#setFolder').disabled = !FS_OK;
+  $('#setFolder').disabled = !FS_OK || !!SERVER;
   $('#setLogoPreview').src = settings.logo || '';
   $('#setLogoRemove').disabled = !settings.logo;
   $('#setTherapist').value = settings.therapist || '';
@@ -1723,6 +1749,7 @@ async function init() {
   try { const st = await idbGet('settings'); if (st) Object.assign(settings, JSON.parse(st)); } catch { /* no settings yet */ }
   renderLogo();
   await loadFolder(); renderFolder();
+  await loadSharedSettings();
   await loadBackupFolder(); renderBackup();
 
   let saved = null;

@@ -12,6 +12,7 @@ const FILES = [
   'css/fonts.css',
   'js/protocol.js',
   'js/zip.js',
+  'js/serverstore.js',
   'js/app.js',
   'manifest.webmanifest',
   'icons/icon-192.png',
@@ -57,6 +58,8 @@ self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipW
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  // the clinic server's case API is live data: never answered from the offline copy
+  if (new URL(req.url).pathname.includes('/api/')) return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     // ?v= stamps only bust the HTTP cache; the cached copy is keyed without them
